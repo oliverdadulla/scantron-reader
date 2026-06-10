@@ -113,7 +113,7 @@ def run_processing(base_dir=None):
             for filename in files:
                 studentname = '.'.join(os.path.basename(filename).split(".")[:-1])
 
-                header_data = pd.read_excel(filename, dtype=str, nrows=8, engine="calamine")
+                header_data = pd.read_excel(filename, dtype=str, nrows=8, engine="openpyxl")
                 scantron_name = studentname
                 scantron_code_raw = ''
                 for _, row in header_data.iterrows():
@@ -177,7 +177,7 @@ def run_processing(base_dir=None):
                     else:
                         display_name = re.sub(r'\*', '', scantron_name).strip()
 
-                sheetdata = pd.read_excel(filename, dtype=str, usecols=[0, 1, 5], engine="calamine")
+                sheetdata = pd.read_excel(filename, dtype=str, usecols=[0, 1, 5], engine="openpyxl")
                 while list(sheetdata.columns)[0] != 'Responses':
                     new_header = sheetdata.iloc[0].tolist()
                     sheetdata.columns = new_header
