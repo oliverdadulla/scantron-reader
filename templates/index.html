@@ -3,276 +3,1037 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scantron Reader</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <title>I ❤️ TFI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <style>
-    body { background: #f0f2f5; }
-    .topbar { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); }
-    .card { border: none; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
-    .card-header { border-radius: 12px 12px 0 0 !important; font-weight: 600; letter-spacing: .3px; }
-    .section-badge { font-size: .72rem; font-weight: 600; padding: .3em .6em; }
-    .folder-card { border: 1px solid #e2e8f0; border-radius: 8px; transition: box-shadow .15s; }
-    .folder-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
-    .file-row { padding: .3rem 0; border-bottom: 1px solid #f1f5f9; font-size: .85rem; }
-    .file-row:last-child { border-bottom: none; }
-    .btn-run { font-size: 1.05rem; padding: .65rem 2.5rem; border-radius: 30px; }
-    .result-item { padding: .3rem 0; font-size: .9rem; }
-    .scroll-box { max-height: 140px; overflow-y: auto; }
-    .step-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex;
-                align-items: center; justify-content: center; font-size: .8rem; font-weight: 700; }
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+    @keyframes heartbeat {
+      0%,100% { transform: scale(1); }
+      14%      { transform: scale(1.18); }
+      28%      { transform: scale(1); }
+      42%      { transform: scale(1.12); }
+      56%      { transform: scale(1); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #0d1117 0%, #1a1040 50%, #0f2060 100%);
+      padding: 0 2rem;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 20px rgba(0,0,0,.5);
+      position: relative;
+      overflow: hidden;
+    }
+    header::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 15% 50%, rgba(255,255,255,.06) 0%, transparent 55%);
+      pointer-events: none;
+    }
+    /* ── Brand (left side) ── */
+    .brand {
+      display: flex; align-items: center; gap: .55rem;
+      text-decoration: none;
+    }
+    .brand-heart {
+      font-size: 1.35rem;
+      animation: heartbeat 1.4s ease-in-out infinite;
+      filter: drop-shadow(0 0 6px rgba(225,29,72,.8));
+      line-height: 1;
+    }
+    .brand-name {
+      font-size: 1.35rem; font-weight: 800;
+      font-style: italic; letter-spacing: .04em;
+      background: linear-gradient(90deg, #fff 0%, #fda4af 40%, #fff 70%, #fecdd3 100%);
+      background-size: 300px 100%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      animation: shimmer 3.5s linear infinite;
+    }
+    @keyframes shimmer {
+      0%   { background-position: -200px 0; }
+      100% { background-position:  200px 0; }
+    }
+
+    /* ── Tab nav (right side, inside header) ── */
+    .tab-bar {
+      display: flex;
+      align-items: center;
+      gap: .25rem;
+    }
+    .tab-btn {
+      padding: .45rem 1.05rem;
+      font-size: .82rem; font-weight: 600;
+      color: rgba(255,255,255,.55);
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      cursor: pointer; font-family: inherit;
+      display: flex; align-items: center; gap: .35rem;
+      transition: color .15s, background .15s, border-color .15s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      color: rgba(255,255,255,.9);
+      background: rgba(255,255,255,.08);
+    }
+    .tab-btn.active {
+      color: #fff;
+      background: rgba(255,255,255,.14);
+      border-color: rgba(255,255,255,.18);
+    }
+
+    /* ── Page ── */
+    .page { max-width: 1160px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: .92rem; font-weight: 600; color: #374151;
+      margin-bottom: 1rem;
+      display: flex; align-items: center; gap: .4rem;
+    }
+
+    /* ── Alert banner ── */
+    .alert-banner {
+      border-radius: 12px; padding: .9rem 1.1rem;
+      margin-bottom: 1.5rem; font-size: .855rem;
+    }
+    .alert-banner.success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+    .alert-banner.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+    .alert-banner .alert-title { font-weight: 700; margin-bottom: .3rem; }
+    .alert-banner .alert-item  { padding: .1rem 0; }
+
+    /* ── Upload grid ── */
+    .upload-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.1rem;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 750px) { .upload-grid { grid-template-columns: 1fr; } }
+
+    /* ── Card ── */
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 1.25rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.04);
+      border-top: 4px solid var(--accent);
+      display: flex; flex-direction: column; gap: .85rem;
+    }
+    .card.blue   { --accent: #3b82f6; --accent-bg: #eff6ff; }
+    .card.purple { --accent: #8b5cf6; --accent-bg: #f5f3ff; }
+    .card.green  { --accent: #10b981; --accent-bg: #ecfdf5; }
+    .card.rose   { --accent: #f43f5e; --accent-bg: #fff1f2; }
+    .card.amber  { --accent: #f59e0b; --accent-bg: #fffbeb; }
+    .card.sky    { --accent: #0ea5e9; --accent-bg: #f0f9ff; }
+
+    /* ── Card header ── */
+    .card-head { display: flex; align-items: center; justify-content: space-between; }
+    .card-title {
+      display: flex; align-items: center; gap: .5rem;
+      font-weight: 600; font-size: .9rem; color: #1e293b;
+    }
+    .card-icon {
+      width: 28px; height: 28px; border-radius: 7px;
+      background: var(--accent-bg);
+      display: flex; align-items: center; justify-content: center; font-size: .9rem;
+    }
+    .chip {
+      font-size: .67rem; font-weight: 600;
+      padding: .15rem .5rem; border-radius: 20px;
+    }
+    .chip-green  { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .chip-blue   { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .chip-purple { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+    .chip-gray   { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    .chip-rose   { background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; }
+    .chip-amber  { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+
+    /* ── AI toggle ── */
+    .toggle-row {
+      display: flex; align-items: center; gap: .6rem;
+      font-size: .82rem; font-weight: 500; color: #374151; cursor: pointer;
+    }
+    .toggle-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: #f59e0b; }
+    .api-key-input {
+      width: 100%; border: 1.5px solid #e5e7eb; border-radius: 8px;
+      padding: .35rem .65rem; font-size: .8rem; outline: none;
+      transition: border-color .15s; font-family: monospace; color: #1e293b;
+    }
+    .api-key-input:focus { border-color: #f59e0b; }
+    .api-key-wrap { display: none; flex-direction: column; gap: .35rem; }
+    .api-key-wrap.visible { display: flex; }
+
+    /* ── Output cols list ── */
+    .col-list {
+      display: flex; flex-direction: column; gap: .22rem;
+      max-height: 200px; overflow-y: auto;
+    }
+    .col-item {
+      font-size: .7rem; color: #475569;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;
+      padding: .2rem .45rem; font-family: monospace;
+    }
+
+    /* ── Drop zone ── */
+    .drop-zone {
+      border: 2px dashed #e2e8f0;
+      border-radius: 10px; background: #fafafa;
+      padding: 1.4rem 1rem; text-align: center;
+      cursor: pointer; position: relative;
+      transition: border-color .2s, background .2s;
+    }
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent); background: var(--accent-bg);
+    }
+    .drop-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .dz-icon { font-size: 1.5rem; display: block; margin-bottom: .3rem; }
+    .drop-zone p { font-size: .76rem; color: #64748b; margin-bottom: .45rem; }
+    .browse-btn {
+      display: inline-block; pointer-events: none;
+      font-size: .75rem; font-weight: 600;
+      padding: .28rem .8rem; border-radius: 6px;
+      border: 1.5px solid var(--accent); color: var(--accent); background: white;
+      transition: background .15s, color .15s;
+    }
+    .drop-zone:hover .browse-btn,
+    .drop-zone.drag-over .browse-btn { background: var(--accent); color: white; }
+
+    /* ── File list ── */
+    .file-list { display: flex; flex-direction: column; gap: .28rem; max-height: 160px; overflow-y: auto; }
+    .empty-note { font-size: .74rem; color: #94a3b8; text-align: center; padding: .2rem 0; }
+    .file-item {
+      display: flex; align-items: center; gap: .4rem;
+      padding: .32rem .5rem;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+    }
+    .file-info { overflow: hidden; flex: 1; }
+    .file-name {
+      font-size: .76rem; font-weight: 500; color: #334155;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .file-base { font-size: .67rem; color: #94a3b8; }
+    .icon-btn {
+      flex-shrink: 0; background: none; border: none; cursor: pointer;
+      color: #cbd5e1; font-size: .82rem; padding: .12rem .28rem;
+      border-radius: 4px; transition: color .15s; line-height: 1;
+    }
+    .icon-btn:hover { color: #ef4444; }
+
+    /* ── Folder input ── */
+    .folder-input {
+      width: 100%; border: 1.5px solid #e5e7eb; border-radius: 8px;
+      padding: .35rem .65rem; font-size: .8rem; outline: none;
+      transition: border-color .15s; font-family: inherit; color: #1e293b;
+    }
+    .folder-input:focus { border-color: #8b5cf6; }
+    .folder-row {
+      display: flex; align-items: center; gap: .35rem;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+      padding: .3rem .5rem; font-size: .76rem; color: #334155;
+    }
+    .folder-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Naming hint ── */
+    .naming-hint {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+      padding: .48rem .7rem; font-size: .71rem; color: #64748b; line-height: 1.5;
+    }
+    .naming-hint strong { color: #334155; display: block; margin-bottom: .18rem; font-size: .72rem; }
+    .naming-hint code {
+      background: #e2e8f0; color: #1e293b; border-radius: 3px;
+      padding: .04rem .28rem; font-size: .68rem; font-family: monospace;
+    }
+
+    /* ── Process wrap ── */
+    .process-wrap { text-align: center; margin: 1.25rem 0 .5rem; }
+    .process-btn {
+      display: inline-flex; align-items: center; gap: .5rem;
+      background: linear-gradient(135deg, #be123c, #e11d48);
+      color: white; border: none; border-radius: 12px;
+      padding: .82rem 2.4rem; font-size: .95rem; font-weight: 600;
+      cursor: pointer; font-family: inherit;
+      box-shadow: 0 4px 14px rgba(190,18,60,.35);
+      transition: transform .2s, box-shadow .2s, opacity .2s;
+    }
+    .process-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 22px rgba(190,18,60,.5); }
+    .process-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-spinner {
+      display: none; width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.35); border-top-color: white;
+      border-radius: 50%; animation: spin .65s linear infinite;
+    }
+    .process-btn.loading .btn-spinner { display: block; }
+    .process-btn.loading .btn-label   { display: none; }
+    .process-hint { font-size: .75rem; color: #ef4444; text-align: center; margin-top: .45rem; }
+
+    /* ── Results section — shared by both tabs ── */
+    .results-section { margin-top: 1.5rem; }
+    .results-section.hidden { display: none; }
+    .results-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1rem;
+    }
+    .dl-all-btn {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: #0f172a; color: white; border: none; border-radius: 8px;
+      padding: .48rem 1rem; font-size: .8rem; font-weight: 500;
+      cursor: pointer; text-decoration: none; transition: background .15s;
+    }
+    .dl-all-btn:hover { background: #1e293b; }
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: .9rem;
+    }
+    .result-card {
+      background: white; border-radius: 12px; padding: 1.1rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07); border-left: 4px solid #10b981;
+    }
+    .result-card.warn  { border-left-color: #f59e0b; }
+    .result-card.error { border-left-color: #ef4444; }
+    .result-name { font-weight: 600; font-size: .9rem; color: #1e293b; margin-bottom: .5rem; }
+    .badge-row { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .6rem; }
+    .badge {
+      font-size: .67rem; font-weight: 600;
+      padding: .16rem .45rem; border-radius: 20px;
+    }
+    .badge.blue   { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .badge.purple { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+    .badge.green  { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+    .badge.amber  { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
+    .badge.red    { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .warn-list { display: flex; flex-direction: column; gap: .25rem; margin-bottom: .6rem; }
+    .warn-item {
+      font-size: .71rem; color: #92400e;
+      background: #fffbeb; border: 1px solid #fde68a;
+      border-radius: 5px; padding: .28rem .5rem;
+    }
+    .err-msg {
+      font-size: .76rem; color: #dc2626;
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 5px; padding: .35rem .55rem; margin-bottom: .6rem;
+    }
+    .result-actions { display: flex; align-items: center; gap: .45rem; }
+    .dl-btn {
+      flex: 1; display: flex; align-items: center; justify-content: center; gap: .35rem;
+      background: #f0fdf4; color: #16a34a; border: 1.5px solid #86efac; border-radius: 7px;
+      padding: .45rem .8rem; font-size: .78rem; font-weight: 500;
+      cursor: pointer; text-decoration: none; transition: background .15s;
+    }
+    .dl-btn:hover { background: #dcfce7; border-color: #4ade80; color: #16a34a; }
+
+    /* ── Reset ── */
+    .reset-wrap {
+      text-align: center; margin-top: 2rem; padding-top: 1.25rem;
+      border-top: 1px solid #e2e8f0;
+    }
+    .reset-btn {
+      background: none; border: 1px solid #e2e8f0; color: #64748b;
+      border-radius: 8px; padding: .42rem .9rem; font-size: .78rem;
+      cursor: pointer; font-family: inherit; transition: all .15s;
+    }
+    .reset-btn:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
   </style>
 </head>
-<body>
+<body data-scroll="{{ 'true' if process_results is not none else 'false' }}">
 
-<div class="topbar text-white py-4 mb-4">
-  <div class="container">
-    <div class="d-flex align-items-center gap-3">
-      <i class="bi bi-ui-checks-grid fs-2"></i>
-      <div>
-        <h4 class="mb-0 fw-bold">Scantron Reader</h4>
-        <small class="opacity-75">Convert scantron answer sheets to Excel</small>
-      </div>
-    </div>
+<!-- Header -->
+<header>
+  <!-- Brand — left -->
+  <div class="brand">
+    <span class="brand-name">I</span>
+    <span class="brand-heart">❤️</span>
+    <span class="brand-name">RIVERSIDE</span>
   </div>
-</div>
 
-<div class="container pb-5">
+  <!-- Tabs — right -->
+  <nav class="tab-bar">
+    <button class="tab-btn pdf" data-tab="pdf" onclick="switchTab('pdf')">
+      Convert Questionnaire
+    </button>
+    <button class="tab-btn autofill" data-tab="autofill" onclick="switchTab('autofill')">
+      Prepare Exam Template
+    </button>
+    <button class="tab-btn scantron" data-tab="scantron" onclick="switchTab('scantron')">
+      Convert Student Answer
+    </button>
+  </nav>
+</header>
+
+
+<!-- ══════════════════════════════════════════════
+     TAB 1 — SCANTRON READER
+══════════════════════════════════════════════ -->
+<div id="tab-scantron" class="tab-section" style="display:none">
+<div class="page">
 
   {% if process_results is not none %}
-  <div class="alert alert-{{ 'danger' if process_results|selectattr('status','eq','error')|list else 'success' }} rounded-3 mb-4">
-    <div class="fw-bold mb-2">
-      <i class="bi bi-{{ 'x-circle' if process_results|selectattr('status','eq','error')|list else 'check-circle' }}"></i>
+  <div class="alert-banner {{ 'error' if process_results|selectattr('status','eq','error')|list else 'success' }}">
+    <div class="alert-title">
+      <i class="bi bi-{{ 'x-circle-fill' if process_results|selectattr('status','eq','error')|list else 'check-circle-fill' }}"></i>
       Processing {{ 'completed with errors' if process_results|selectattr('status','eq','error')|list else 'completed successfully' }}
     </div>
     {% for r in process_results %}
-    <div class="result-item">
-      <i class="bi bi-{{ 'check-circle-fill text-success' if r.status == 'success' else 'x-circle-fill text-danger' }} me-1"></i>
+    <div class="alert-item">
+      {% if r.status == 'success' %}
+      <i class="bi bi-check-circle" style="color:#16a34a"></i>
+      {% else %}
+      <i class="bi bi-x-circle" style="color:#dc2626"></i>
+      {% endif %}
       {{ r.message }}
     </div>
     {% endfor %}
   </div>
   {% endif %}
 
-  <div class="row g-4">
+  <div class="section-label">① Upload Files</div>
 
-    <!-- STEP 1: Students -->
-    <div class="col-lg-6">
-      <div class="card h-100">
-        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-          <span>
-            <span class="step-num bg-white text-primary me-2">1</span>
-            Students List
-          </span>
-          {% if students_exists %}
-          <span class="badge bg-success section-badge"><i class="bi bi-check-lg"></i> Loaded</span>
-          {% else %}
-          <span class="badge bg-danger section-badge"><i class="bi bi-x-lg"></i> Missing</span>
-          {% endif %}
+  <div class="upload-grid">
+
+    <!-- Students List -->
+    <div class="card blue">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">📋</div> Students List</div>
+        {% if students_exists %}
+        <span class="chip chip-green"><i class="bi bi-check-lg"></i> Loaded</span>
+        {% endif %}
+      </div>
+      <form action="/upload/students" method="post" enctype="multipart/form-data" id="form-students">
+        <div class="drop-zone" id="dz-students"
+             ondragover="dzDrag(event,'dz-students')" ondragleave="dzLeave('dz-students')"
+             ondrop="dzDrop(event,'dz-students','inp-students')">
+          <input type="file" name="file" accept=".xlsx" id="inp-students"
+                 onchange="scShowFile('inp-students','sc-sl-students','form-students')">
+          <span class="dz-icon">📂</span>
+          <p>Drag &amp; drop .xlsx file here</p>
+          <span class="browse-btn">Browse files</span>
         </div>
-        <div class="card-body">
-          {% if students_exists %}
-          <div class="alert alert-success py-2 mb-3">
-            <i class="bi bi-file-earmark-excel-fill me-1"></i> <strong>students.xlsx</strong> is loaded
-          </div>
-          {% else %}
-          <div class="alert alert-warning py-2 mb-3">
-            <i class="bi bi-exclamation-triangle me-1"></i> Upload <strong>students.xlsx</strong> to continue
-          </div>
-          {% endif %}
-          <form action="/upload/students" method="post" enctype="multipart/form-data">
-            <label class="form-label small fw-semibold text-muted">Upload / Replace students.xlsx</label>
-            <div class="input-group">
-              <input type="file" class="form-control" name="file" accept=".xlsx" required>
-              <button class="btn btn-primary" type="submit"><i class="bi bi-upload"></i> Upload</button>
-            </div>
-          </form>
+      </form>
+      <div id="sc-sl-students">
+        {% if students_exists %}
+        <div class="file-item">
+          <div class="file-info"><div class="file-name">📄 students.xlsx</div></div>
         </div>
+        {% else %}
+        <div class="empty-note">No file uploaded</div>
+        {% endif %}
+      </div>
+      <div class="naming-hint">
+        <strong>📌 Required filename</strong>
+        Must be named exactly <code>students.xlsx</code><br>
+        Columns: <code>StudentNo</code> · <code>LastName</code> · <code>FirstName</code>
       </div>
     </div>
 
-    <!-- STEP 2: Questions -->
-    <div class="col-lg-6">
-      <div class="card h-100">
-        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-          <span>
-            <span class="step-num bg-white text-info me-2">2</span>
-            Question Files <small class="opacity-75">(optional)</small>
-          </span>
-          <span class="badge bg-light text-dark section-badge">{{ question_files|length }} file(s)</span>
-        </div>
-        <div class="card-body">
-          {% if question_files %}
-          <div class="scroll-box mb-3">
-            {% for f in question_files %}
-            <div class="file-row d-flex justify-content-between align-items-center">
-              <span><i class="bi bi-file-earmark-excel text-success me-1"></i>{{ f }}</span>
-              <form action="/delete/question/{{ f }}" method="post" class="d-inline">
-                <button class="btn btn-sm btn-link text-danger p-0" type="submit"
-                        onclick="return confirm('Remove {{ f }}?')"><i class="bi bi-trash"></i></button>
-              </form>
-            </div>
-            {% endfor %}
-          </div>
-          {% else %}
-          <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>No question files. Answers will be processed without question labels.</p>
-          {% endif %}
-          <form action="/upload/questions" method="post" enctype="multipart/form-data">
-            <div class="input-group">
-              <input type="file" class="form-control" name="files" accept=".xlsx" multiple required>
-              <button class="btn btn-info text-white" type="submit"><i class="bi bi-upload"></i> Upload</button>
-            </div>
+    <!-- Answer Folders -->
+    <div class="card purple">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">📁</div> Answer Folders</div>
+        <span class="chip chip-purple">{{ answer_folders|length }} folder(s)</span>
+      </div>
+      <div class="file-list">
+        {% for folder, files in answer_folders.items() %}
+        <div class="folder-row">
+          <i class="bi bi-folder-fill" style="color:#8b5cf6;flex-shrink:0"></i>
+          <span title="{{ folder }}">{{ folder }}</span>
+          <span style="color:#94a3b8;font-size:.68rem;flex-shrink:0">{{ files|length }} file(s)</span>
+          <form action="/delete/answers/{{ folder }}" method="post" style="display:inline;margin:0">
+            <button class="icon-btn" type="submit" onclick="return confirm('Delete {{ folder }}?')">✕</button>
           </form>
         </div>
+        {% else %}
+        <div class="empty-note">No folders yet</div>
+        {% endfor %}
+      </div>
+      <form action="/upload/answers" method="post" enctype="multipart/form-data" id="form-answers">
+        <input type="text" class="folder-input" name="folder_name"
+               placeholder="Folder name (e.g. PHCHEM221-LEC)" list="folder-datalist" required>
+        <datalist id="folder-datalist">
+          {% for folder in answer_folders.keys() %}
+          <option value="{{ folder }}">
+          {% endfor %}
+        </datalist>
+        <div class="drop-zone" style="margin-top:.5rem" id="dz-answers"
+             ondragover="dzDrag(event,'dz-answers')" ondragleave="dzLeave('dz-answers')"
+             ondrop="dzDrop(event,'dz-answers','inp-answers')">
+          <input type="file" name="files" accept=".xlsx" multiple id="inp-answers"
+                 onchange="scShowFiles('inp-answers','sc-sl-answers','form-answers')">
+          <span class="dz-icon">📂</span>
+          <p>Drag &amp; drop .xlsx files here</p>
+          <span class="browse-btn">Browse files</span>
+        </div>
+        <div id="sc-sl-answers"><div class="empty-note">No files selected</div></div>
+      </form>
+      <div class="naming-hint">
+        <strong>📌 Folder naming example</strong>
+        <code>PHCHEM221-LEC</code> &nbsp;/&nbsp; <code>NCM112-LAB-GRP1</code><br>
+        Files inside: scantron output <code>.xlsx</code> (any name)
       </div>
     </div>
 
-    <!-- STEP 3: Answer Folders -->
-    <div class="col-12">
-      <div class="card">
-        <div class="card-header bg-warning d-flex justify-content-between align-items-center">
-          <span>
-            <span class="step-num bg-white text-warning me-2">3</span>
-            Answer Folders
-          </span>
-          <span class="badge bg-dark section-badge">{{ answer_folders|length }} folder(s)</span>
+    <!-- Question Files -->
+    <div class="card green">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">❓</div> Question Files</div>
+        <span class="chip chip-green">{{ question_files|length }} file(s)</span>
+      </div>
+      <form action="/upload/questions" method="post" enctype="multipart/form-data" id="form-questions">
+        <div class="drop-zone" id="dz-questions"
+             ondragover="dzDrag(event,'dz-questions')" ondragleave="dzLeave('dz-questions')"
+             ondrop="dzDrop(event,'dz-questions','inp-questions')">
+          <input type="file" name="files" accept=".xlsx" multiple id="inp-questions"
+                 onchange="scShowFiles('inp-questions','sc-sl-questions','form-questions')">
+          <span class="dz-icon">📂</span>
+          <p>Drag &amp; drop .xlsx files here</p>
+          <span class="browse-btn">Browse files</span>
         </div>
-        <div class="card-body">
-
-          {% if answer_folders %}
-          <div class="row g-2 mb-4">
-            {% for folder, files in answer_folders.items() %}
-            <div class="col-md-4 col-sm-6">
-              <div class="folder-card p-3">
-                <div class="d-flex justify-content-between align-items-start mb-1">
-                  <div class="fw-semibold small text-truncate me-2" title="{{ folder }}">
-                    <i class="bi bi-folder-fill text-warning me-1"></i>{{ folder }}
-                  </div>
-                  <form action="/delete/answers/{{ folder }}" method="post" class="flex-shrink-0">
-                    <button class="btn btn-sm btn-outline-danger py-0 px-1" type="submit"
-                            onclick="return confirm('Delete folder {{ folder }} and all its files?')">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
-                </div>
-                <span class="badge bg-secondary">{{ files|length }} student(s)</span>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-          {% else %}
-          <div class="alert alert-warning py-2 mb-4">
-            <i class="bi bi-exclamation-triangle me-1"></i> No answer folders yet. Use the form below to add one.
-          </div>
-          {% endif %}
-
-          <div class="border rounded-3 p-3 bg-light">
-            <div class="fw-semibold mb-2 small text-muted">ADD ANSWER FILES</div>
-            <form action="/upload/answers" method="post" enctype="multipart/form-data">
-              <div class="row g-2 align-items-end">
-                <div class="col-md-4">
-                  <label class="form-label small mb-1">Exam Folder Name</label>
-                  <input type="text" class="form-control" name="folder_name"
-                         placeholder="e.g. PHCHEM221-LEC-TANNINS"
-                         list="folder-list" required>
-                  <datalist id="folder-list">
-                    {% for folder in answer_folders.keys() %}
-                    <option value="{{ folder }}">
-                    {% endfor %}
-                  </datalist>
-                  <div class="form-text">Type new name or pick existing</div>
-                </div>
-                <div class="col-md-6">
-                  <label class="form-label small mb-1">Student Answer Files (.xlsx)</label>
-                  <input type="file" class="form-control" name="files" accept=".xlsx" multiple required>
-                </div>
-                <div class="col-md-2">
-                  <button class="btn btn-warning w-100" type="submit">
-                    <i class="bi bi-upload"></i> Upload
-                  </button>
-                </div>
-              </div>
+      </form>
+      <div id="sc-sl-questions">
+        {% if question_files %}
+        <div class="file-list">
+          {% for f in question_files %}
+          <div class="file-item">
+            <div class="file-info"><div class="file-name">📄 {{ f }}</div></div>
+            <form action="/delete/question/{{ f }}" method="post" style="display:inline;margin:0">
+              <button class="icon-btn" type="submit" onclick="return confirm('Remove {{ f }}?')">✕</button>
             </form>
           </div>
+          {% endfor %}
         </div>
+        {% else %}
+        <div class="empty-note">No files uploaded</div>
+        {% endif %}
+      </div>
+      <div class="naming-hint">
+        <strong>📌 Filename example</strong>
+        <code>PHCHEM221-LEC_questions.xlsx</code><br>
+        One file per exam. Any <code>.xlsx</code> name is accepted.
       </div>
     </div>
 
-    <!-- STEP 4: Process -->
-    <div class="col-12">
-      <div class="card border-2 border-success">
-        <div class="card-body py-4 text-center">
-          <h5 class="fw-bold mb-1"><i class="bi bi-lightning-charge-fill text-warning me-1"></i> Run Processing</h5>
-          <p class="text-muted small mb-3">Matches student codes, resolves names, and exports Excel files to Converted/</p>
-          <form action="/process" method="post" onsubmit="showLoading(this)">
-            <button class="btn btn-success btn-run" type="submit"
-                    id="run-btn"
-                    {% if not students_exists or not answer_folders %}disabled{% endif %}>
-              <span id="run-label"><i class="bi bi-play-circle-fill me-2"></i>Process All Folders</span>
-              <span id="run-spinner" class="d-none">
-                <span class="spinner-border spinner-border-sm me-2"></span>Processing…
-              </span>
+  </div><!-- /upload-grid -->
+
+  <div class="process-wrap">
+    <form action="/process" method="post" onsubmit="scStartLoading()">
+      <button class="process-btn" type="submit" id="sc-process-btn"
+              {% if not students_exists or not answer_folders %}disabled{% endif %}>
+        <div class="btn-spinner"></div>
+        <span class="btn-label">⚡ Process Files</span>
+      </button>
+    </form>
+    {% if not students_exists %}
+    <p class="process-hint">Upload students.xlsx first</p>
+    {% elif not answer_folders %}
+    <p class="process-hint">Add at least one answer folder</p>
+    {% endif %}
+  </div>
+
+  {% if output_files %}
+  <div class="results-section">
+    <div class="results-header">
+      <div class="section-label" style="margin:0">② Download Results</div>
+    </div>
+    <div class="results-grid">
+      {% for f in output_files %}
+      <div class="result-card">
+        <div class="result-name">📄 {{ f }}</div>
+        <div class="result-actions">
+          <a href="/download/{{ f }}" class="dl-btn">
+            <i class="bi bi-download"></i> Download
+          </a>
+          <form action="/delete/output/{{ f }}" method="post" style="margin:0">
+            <button class="icon-btn" type="submit" onclick="return confirm('Delete {{ f }}?')"
+                    title="Delete" style="font-size:.9rem;padding:.45rem .5rem">
+              <i class="bi bi-trash"></i>
             </button>
-            {% if not students_exists %}
-            <div class="text-danger small mt-2"><i class="bi bi-arrow-up"></i> Upload students.xlsx first (Step 1)</div>
-            {% elif not answer_folders %}
-            <div class="text-danger small mt-2"><i class="bi bi-arrow-up"></i> Add answer folders first (Step 3)</div>
-            {% endif %}
           </form>
         </div>
       </div>
+      {% endfor %}
     </div>
+  </div>
+  {% endif %}
 
-    <!-- Output Files -->
-    {% if output_files %}
-    <div class="col-12">
-      <div class="card">
-        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-          <span><i class="bi bi-file-earmark-arrow-down me-1"></i> Output Files</span>
-          <span class="badge bg-light text-dark section-badge">{{ output_files|length }} file(s)</span>
-        </div>
-        <div class="card-body">
-          <div class="row g-2">
-            {% for f in output_files %}
-            <div class="col-md-4 col-sm-6">
-              <div class="d-flex align-items-center justify-content-between border rounded-3 px-3 py-2 bg-light">
-                <span class="small text-truncate me-2" title="{{ f }}">
-                  <i class="bi bi-file-earmark-excel-fill text-success me-1"></i>{{ f }}
-                </span>
-                <div class="d-flex gap-1 flex-shrink-0">
-                  <a href="/download/{{ f }}" class="btn btn-sm btn-success" title="Download">
-                    <i class="bi bi-download"></i>
-                  </a>
-                  <form action="/delete/output/{{ f }}" method="post" class="d-inline">
-                    <button class="btn btn-sm btn-outline-danger" type="submit"
-                            onclick="return confirm('Delete {{ f }}?')" title="Delete">
-                      <i class="bi bi-trash"></i>
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </div>
-            {% endfor %}
-          </div>
-        </div>
+  <div class="reset-wrap">
+    <form action="/clear" method="post"
+          onsubmit="return confirm('Clear all uploaded files and start over?')">
+      <button class="reset-btn" type="submit">🗑 Clear everything and start over</button>
+    </form>
+  </div>
+
+</div></div><!-- /tab-scantron -->
+
+
+<!-- ══════════════════════════════════════════════
+     TAB 2 — EXAM AUTOFILL
+══════════════════════════════════════════════ -->
+<div id="tab-autofill" class="tab-section" style="display:none">
+<div class="page">
+
+  <div class="section-label">① Upload Files</div>
+
+  <div class="upload-grid">
+
+    <!-- Exam Template -->
+    <div class="card blue">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">📋</div> Exam Template</div>
+      </div>
+      <div class="drop-zone" id="dz-exam" onclick="document.getElementById('inp-exam').click()">
+        <span class="dz-icon">📂</span>
+        <p>Drag &amp; drop .xlsx files here</p>
+        <span class="browse-btn">Browse files</span>
+      </div>
+      <input type="file" id="inp-exam" multiple accept=".xlsx" style="display:none"
+             onchange="afHandle('exam', this.files); this.value=''">
+      <div class="file-list" id="fl-exam"><div class="empty-note">No files uploaded</div></div>
+      <div class="naming-hint">
+        <strong>📌 Filename example</strong>
+        <code>MLSCLIN23LAB_exam_template.xlsx</code><br>
+        Suffix must be <code>_exam_template</code>
       </div>
     </div>
-    {% endif %}
 
-  </div><!-- /row -->
-</div><!-- /container -->
+    <!-- Tags -->
+    <div class="card purple">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">🏷️</div> Tags</div>
+        <span class="chip chip-gray">Optional</span>
+      </div>
+      <div class="drop-zone" id="dz-tags" onclick="document.getElementById('inp-tags').click()">
+        <span class="dz-icon">📂</span>
+        <p>Drag &amp; drop .xlsx files here</p>
+        <span class="browse-btn">Browse files</span>
+      </div>
+      <input type="file" id="inp-tags" multiple accept=".xlsx" style="display:none"
+             onchange="afHandle('tags', this.files); this.value=''">
+      <div class="file-list" id="fl-tags"><div class="empty-note">No files uploaded</div></div>
+      <div class="naming-hint">
+        <strong>📌 Filename example</strong>
+        <code>MLSCLIN23LAB_tags.xlsx</code><br>
+        Base name must match exam template. Suffix: <code>_tags</code>
+      </div>
+    </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Co-Analysis -->
+    <div class="card green">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">✅</div> Co-Analysis</div>
+        <span class="chip chip-gray">Optional</span>
+      </div>
+      <div class="drop-zone" id="dz-answer" onclick="document.getElementById('inp-answer').click()">
+        <span class="dz-icon">📂</span>
+        <p>Drag &amp; drop .xlsx files here</p>
+        <span class="browse-btn">Browse files</span>
+      </div>
+      <input type="file" id="inp-answer" multiple accept=".xlsx" style="display:none"
+             onchange="afHandle('answer', this.files); this.value=''">
+      <div class="file-list" id="fl-answer"><div class="empty-note">No files uploaded</div></div>
+      <div class="naming-hint">
+        <strong>📌 Filename example</strong>
+        <code>MLSCLIN23LAB_correct_answer.xlsx</code><br>
+        Base name must match exam template. Suffix: <code>_correct_answer</code>
+      </div>
+    </div>
+
+  </div><!-- /upload-grid -->
+
+  <div class="process-wrap">
+    <button class="process-btn" id="af-process-btn" onclick="afProcess()" disabled>
+      <div class="btn-spinner"></div>
+      <span class="btn-label" id="af-btn-label">⚡ Process Files</span>
+    </button>
+  </div>
+
+  <div class="results-section hidden" id="af-results-section">
+    <div class="results-header">
+      <div class="section-label" style="margin:0">② Download Results</div>
+      <a class="dl-all-btn" href="/autofill/download-all">
+        <i class="bi bi-download"></i> Download All (.zip)
+      </a>
+    </div>
+    <div class="results-grid" id="af-results-grid"></div>
+  </div>
+
+  <div class="reset-wrap">
+    <button class="reset-btn" onclick="afReset()">🗑 Clear everything and start over</button>
+  </div>
+
+</div></div><!-- /tab-autofill -->
+
+
+<!-- ══════════════════════════════════════════════
+     TAB 3 — PDF TO EXCEL
+══════════════════════════════════════════════ -->
+<div id="tab-pdf" class="tab-section" style="display:none">
+<div class="page">
+
+  <div class="section-label">① Upload Files</div>
+
+  <div class="upload-grid">
+
+    <!-- PDF Upload -->
+    <div class="card rose">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">📄</div> PDF Files</div>
+      </div>
+      <div class="drop-zone" id="dz-pdf" onclick="document.getElementById('inp-pdf').click()">
+        <span class="dz-icon">📂</span>
+        <p>Drag &amp; drop .pdf files here</p>
+        <span class="browse-btn">Browse files</span>
+      </div>
+      <input type="file" id="inp-pdf" multiple accept=".pdf" style="display:none"
+             onchange="pdfHandle(this.files); this.value=''">
+      <div class="file-list" id="fl-pdf"><div class="empty-note">No files uploaded</div></div>
+      <div class="naming-hint">
+        <strong>📌 Accepted files</strong>
+        Any exam PDF with numbered multiple-choice questions<br>
+        Supports single-column and two-column layouts
+      </div>
+    </div>
+
+    <!-- AI Filter Settings -->
+    <div class="card amber">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">🤖</div> AI Filtering</div>
+        <span class="chip chip-gray">Optional</span>
+      </div>
+      <p style="font-size:.78rem;color:#64748b;line-height:1.5">
+        Uses <strong>Groq AI</strong> to remove non-question items
+        (page numbers, headers, table rows) that slipped through parsing.
+      </p>
+      <label class="toggle-row">
+        <input type="checkbox" id="pdf-ai-toggle" onchange="pdfToggleAI(this.checked)">
+        Enable AI filtering
+      </label>
+      <div class="api-key-wrap" id="pdf-api-wrap">
+        <label style="font-size:.74rem;color:#64748b;font-weight:500">Groq API Key</label>
+        <input type="password" class="api-key-input" id="pdf-api-key"
+               placeholder="gsk_…  (or set GROQ_API_KEY env var)">
+        <span style="font-size:.68rem;color:#94a3b8">
+          Get a free key at <strong>console.groq.com</strong>
+        </span>
+      </div>
+      <div class="naming-hint">
+        <strong>📌 Without AI</strong>
+        Regex-based parser handles most well-formatted PDFs accurately.
+        Enable AI only if you see leftover non-question rows in the output.
+      </div>
+    </div>
+
+    <!-- Output Format -->
+    <div class="card sky">
+      <div class="card-head">
+        <div class="card-title"><div class="card-icon">📊</div> Output Format</div>
+        <span class="chip chip-blue">Excel (.xlsx)</span>
+      </div>
+      <p style="font-size:.78rem;color:#64748b;margin-bottom:.35rem;line-height:1.5">
+        Each PDF produces one <code style="background:#e2e8f0;border-radius:3px;padding:.02rem .28rem;font-size:.7rem">.xlsx</code>
+        file with these columns:
+      </p>
+      <div class="col-list">
+        <div class="col-item">Question No.</div>
+        <div class="col-item">Question</div>
+        <div class="col-item">Choice1</div>
+        <div class="col-item">iscorrect1 (1/0)</div>
+        <div class="col-item">Choice2</div>
+        <div class="col-item">iscorrect2 (1/0)</div>
+        <div class="col-item">Choice_3</div>
+        <div class="col-item">iscorrect3 (1/0)</div>
+        <div class="col-item">Choice_4</div>
+        <div class="col-item">iscorrect4 (1/0)</div>
+        <div class="col-item">Rate/Points</div>
+        <div class="col-item">Content Standards</div>
+        <div class="col-item">TOPIC · SUBTOPIC · DOMAIN</div>
+      </div>
+    </div>
+
+  </div><!-- /upload-grid -->
+
+  <div class="process-wrap">
+    <button class="process-btn" id="pdf-process-btn" onclick="pdfProcess()" disabled>
+      <div class="btn-spinner"></div>
+      <span class="btn-label" id="pdf-btn-label">⚡ Convert to Excel</span>
+    </button>
+  </div>
+
+  <div class="results-section hidden" id="pdf-results-section">
+    <div class="results-header">
+      <div class="section-label" style="margin:0">② Download Results</div>
+      <a class="dl-all-btn" href="/pdf/download-all">
+        <i class="bi bi-download"></i> Download All (.zip)
+      </a>
+    </div>
+    <div class="results-grid" id="pdf-results-grid"></div>
+  </div>
+
+  <div class="reset-wrap">
+    <button class="reset-btn" onclick="pdfReset()">🗑 Clear everything and start over</button>
+  </div>
+
+</div></div><!-- /tab-pdf -->
+
+
 <script>
-function showLoading(form) {
-  document.getElementById('run-label').classList.add('d-none');
-  document.getElementById('run-spinner').classList.remove('d-none');
-  document.getElementById('run-btn').disabled = true;
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-section').forEach(el => el.style.display = 'none');
+  const section = document.getElementById('tab-' + tab);
+  if (section) section.style.display = 'block';
+  document.querySelectorAll('.tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === tab)
+  );
+  localStorage.setItem('activeTab', tab);
 }
-// Scroll to results if present
-{% if process_results is not none %}
-window.scrollTo({top: 0, behavior: 'smooth'});
-{% endif %}
+window.addEventListener('DOMContentLoaded', () => {
+  const serverTab = "{{ active_tab }}";
+  const tab = serverTab !== 'scantron' ? serverTab : (localStorage.getItem('activeTab') || 'scantron');
+  switchTab(tab);
+  if (document.body.dataset.scroll === 'true') window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// ── Shared drag & drop ─────────────────────────────────────────────────────
+function dzDrag(e, id) { e.preventDefault(); document.getElementById(id).classList.add('drag-over'); }
+function dzLeave(id)   { document.getElementById(id).classList.remove('drag-over'); }
+function dzDrop(e, dzId, inputId) {
+  e.preventDefault();
+  document.getElementById(dzId).classList.remove('drag-over');
+  const input = document.getElementById(inputId);
+  try { input.files = e.dataTransfer.files; } catch(_) {}
+  input.dispatchEvent(new Event('change'));
+}
+
+// ── Scantron Reader ────────────────────────────────────────────────────────
+function scShowFile(inputId, statusId, formId) {
+  const input = document.getElementById(inputId);
+  if (!input.files?.length) return;
+  document.getElementById(statusId).innerHTML =
+    `<div class="file-item"><div class="file-info"><div class="file-name">📄 ${input.files[0].name}</div></div></div>`;
+  document.getElementById(formId).submit();
+}
+function scShowFiles(inputId, statusId, formId) {
+  const input = document.getElementById(inputId);
+  if (!input.files?.length) return;
+  const items = Array.from(input.files).map(f =>
+    `<div class="file-item"><div class="file-info"><div class="file-name">📄 ${f.name}</div></div></div>`
+  ).join('');
+  document.getElementById(statusId).innerHTML = `<div class="file-list">${items}</div>`;
+  document.getElementById(formId).submit();
+}
+function scStartLoading() {
+  const btn = document.getElementById('sc-process-btn');
+  if (btn) { btn.classList.add('loading'); btn.disabled = true; }
+}
+
+// ── Exam Autofill ──────────────────────────────────────────────────────────
+const afState = { exam: [], tags: [], answer: [] };
+
+function afSyncBtn() {
+  document.getElementById('af-process-btn').disabled = afState.exam.length === 0;
+}
+function afRender(type) {
+  const el  = document.getElementById('fl-' + type);
+  const arr = afState[type];
+  if (!arr.length) { el.innerHTML = '<div class="empty-note">No files uploaded</div>'; return; }
+  el.innerHTML = '<div class="file-list">' + arr.map(f => `
+    <div class="file-item">
+      <div class="file-info">
+        <div class="file-name" title="${f.filename}">📄 ${f.filename}</div>
+        <div class="file-base">base: <strong>${f.base}</strong></div>
+      </div>
+      <button class="icon-btn" onclick="afRemove('${type}','${f.filename}')" title="Remove">✕</button>
+    </div>`).join('') + '</div>';
+}
+async function afHandle(type, files) {
+  const valid = Array.from(files).filter(f => f.name.endsWith('.xlsx') && !f.name.startsWith('~$'));
+  if (!valid.length) return;
+  const fd = new FormData();
+  fd.append('type', type);
+  valid.forEach(f => fd.append('files', f));
+  const data = await fetch('/autofill/upload', { method: 'POST', body: fd }).then(r => r.json());
+  if (!data.uploaded) return;
+  data.uploaded.forEach(f => {
+    if (!afState[type].find(x => x.filename === f.filename)) afState[type].push(f);
+  });
+  afRender(type); afSyncBtn();
+}
+async function afRemove(type, filename) {
+  await fetch(`/autofill/remove/${type}/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+  afState[type] = afState[type].filter(f => f.filename !== filename);
+  afRender(type); afSyncBtn();
+}
+['exam', 'tags', 'answer'].forEach(t => {
+  const z = document.getElementById('dz-' + t);
+  if (!z) return;
+  z.addEventListener('dragover',  e => { e.preventDefault(); z.classList.add('drag-over'); });
+  z.addEventListener('dragleave', () => z.classList.remove('drag-over'));
+  z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('drag-over'); afHandle(t, e.dataTransfer.files); });
+});
+async function afProcess() {
+  const btn   = document.getElementById('af-process-btn');
+  const label = document.getElementById('af-btn-label');
+  btn.classList.add('loading'); btn.disabled = true; label.textContent = 'Processing…';
+  try {
+    const data = await fetch('/autofill/process', { method: 'POST' }).then(r => r.json());
+    if (data.error) { alert('Error: ' + data.error); return; }
+    afShowResults(data.results);
+  } catch(e) { alert('Unexpected error: ' + e.message); }
+  finally {
+    btn.classList.remove('loading');
+    btn.disabled = afState.exam.length === 0;
+    label.textContent = '⚡ Process Files';
+  }
+}
+function afShowResults(results) {
+  const section = document.getElementById('af-results-section');
+  const grid    = document.getElementById('af-results-grid');
+  section.classList.remove('hidden');
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  grid.innerHTML = results.map(r => {
+    const isErr  = r.status === 'error';
+    const hasW   = r.warnings?.length;
+    const cls    = isErr ? 'error' : hasW ? 'warn' : '';
+    const badges = [
+      `<span class="badge blue">${r.rows} rows</span>`,
+      r.tags    ? `<span class="badge purple">🏷️ Tags ✓</span>`   : `<span class="badge amber">No Tags</span>`,
+      r.answers ? `<span class="badge green">✅ Answers ✓</span>` : `<span class="badge amber">No Answers</span>`,
+      isErr     ? `<span class="badge red">Error</span>`          : `<span class="badge green">Done ✓</span>`,
+    ].join('');
+    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item">⚠️ ${w}</div>`).join('')}</div>` : '';
+    const errMsg = isErr ? `<div class="err-msg">❌ ${r.error}</div>` : '';
+    const dl     = r.output ? `<a class="dl-btn" href="/autofill/download/${encodeURIComponent(r.output)}"><i class="bi bi-download"></i> Download</a>` : '';
+    return `<div class="result-card ${cls}">
+      <div class="result-name">${r.base}</div>
+      <div class="badge-row">${badges}</div>
+      ${warns}${errMsg}
+      <div class="result-actions">${dl}</div>
+    </div>`;
+  }).join('');
+}
+async function afReset() {
+  if (!confirm('Clear all uploaded files and results?')) return;
+  await fetch('/autofill/clear', { method: 'POST' });
+  afState.exam = []; afState.tags = []; afState.answer = [];
+  ['exam','tags','answer'].forEach(afRender); afSyncBtn();
+  document.getElementById('af-results-section').classList.add('hidden');
+}
+
+// ── PDF to Excel ───────────────────────────────────────────────────────────
+const pdfFiles = [];
+
+function pdfSyncBtn() {
+  document.getElementById('pdf-process-btn').disabled = pdfFiles.length === 0;
+}
+function pdfRenderList() {
+  const el = document.getElementById('fl-pdf');
+  if (!pdfFiles.length) { el.innerHTML = '<div class="empty-note">No files uploaded</div>'; return; }
+  el.innerHTML = '<div class="file-list">' + pdfFiles.map(name => `
+    <div class="file-item">
+      <div class="file-info"><div class="file-name" title="${name}">📄 ${name}</div></div>
+      <button class="icon-btn" onclick="pdfRemove('${name}')" title="Remove">✕</button>
+    </div>`).join('') + '</div>';
+}
+async function pdfHandle(files) {
+  const valid = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (!valid.length) return;
+  const fd = new FormData();
+  valid.forEach(f => fd.append('files', f));
+  const data = await fetch('/pdf/upload', { method: 'POST', body: fd }).then(r => r.json());
+  if (!data.uploaded) return;
+  data.uploaded.forEach(n => { if (!pdfFiles.includes(n)) pdfFiles.push(n); });
+  pdfRenderList(); pdfSyncBtn();
+}
+async function pdfRemove(name) {
+  await fetch(`/pdf/remove/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  const idx = pdfFiles.indexOf(name);
+  if (idx > -1) pdfFiles.splice(idx, 1);
+  pdfRenderList(); pdfSyncBtn();
+}
+
+const dzPdf = document.getElementById('dz-pdf');
+if (dzPdf) {
+  dzPdf.addEventListener('dragover',  e => { e.preventDefault(); dzPdf.classList.add('drag-over'); });
+  dzPdf.addEventListener('dragleave', () => dzPdf.classList.remove('drag-over'));
+  dzPdf.addEventListener('drop', e => { e.preventDefault(); dzPdf.classList.remove('drag-over'); pdfHandle(e.dataTransfer.files); });
+}
+
+function pdfToggleAI(on) {
+  document.getElementById('pdf-api-wrap').classList.toggle('visible', on);
+}
+
+async function pdfProcess() {
+  const btn   = document.getElementById('pdf-process-btn');
+  const label = document.getElementById('pdf-btn-label');
+  btn.classList.add('loading'); btn.disabled = true; label.textContent = 'Converting…';
+  const use_ai  = document.getElementById('pdf-ai-toggle').checked;
+  const api_key = document.getElementById('pdf-api-key').value.trim();
+  try {
+    const data = await fetch('/pdf/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ use_ai, api_key }),
+    }).then(r => r.json());
+    if (data.error) { alert('Error: ' + data.error); return; }
+    pdfShowResults(data.results);
+  } catch(e) { alert('Unexpected error: ' + e.message); }
+  finally {
+    btn.classList.remove('loading');
+    btn.disabled = pdfFiles.length === 0;
+    label.textContent = '⚡ Convert to Excel';
+  }
+}
+
+function pdfShowResults(results) {
+  const section = document.getElementById('pdf-results-section');
+  const grid    = document.getElementById('pdf-results-grid');
+  section.classList.remove('hidden');
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  grid.innerHTML = results.map(r => {
+    const isErr  = r.status === 'error';
+    const hasW   = r.warnings?.length;
+    const cls    = isErr ? 'error' : hasW ? 'warn' : '';
+    const badges = [
+      `<span class="badge blue">${r.questions ?? 0} questions</span>`,
+      r.ai_filtered ? `<span class="badge purple">🤖 AI filtered</span>` : '',
+      isErr ? `<span class="badge red">Error</span>` : `<span class="badge green">Done ✓</span>`,
+    ].join('');
+    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item">⚠️ ${w}</div>`).join('')}</div>` : '';
+    const errMsg = isErr ? `<div class="err-msg">❌ ${r.error}</div>` : '';
+    const dl     = r.output ? `<a class="dl-btn" href="/pdf/download/${encodeURIComponent(r.output)}"><i class="bi bi-download"></i> Download</a>` : '';
+    return `<div class="result-card ${cls}">
+      <div class="result-name">📄 ${r.name}</div>
+      <div class="badge-row">${badges}</div>
+      ${warns}${errMsg}
+      <div class="result-actions">${dl}</div>
+    </div>`;
+  }).join('');
+}
+
+async function pdfReset() {
+  if (!confirm('Clear all uploaded PDFs and results?')) return;
+  await fetch('/pdf/clear', { method: 'POST' });
+  pdfFiles.length = 0;
+  pdfRenderList(); pdfSyncBtn();
+  document.getElementById('pdf-results-section').classList.add('hidden');
+}
 </script>
 </body>
 </html>
