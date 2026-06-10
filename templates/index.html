@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scantron Reader</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background: #f0f2f5; }
+    .topbar { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); }
+    .card { border: none; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    .card-header { border-radius: 12px 12px 0 0 !important; font-weight: 600; letter-spacing: .3px; }
+    .section-badge { font-size: .72rem; font-weight: 600; padding: .3em .6em; }
+    .folder-card { border: 1px solid #e2e8f0; border-radius: 8px; transition: box-shadow .15s; }
+    .folder-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+    .file-row { padding: .3rem 0; border-bottom: 1px solid #f1f5f9; font-size: .85rem; }
+    .file-row:last-child { border-bottom: none; }
+    .btn-run { font-size: 1.05rem; padding: .65rem 2.5rem; border-radius: 30px; }
+    .result-item { padding: .3rem 0; font-size: .9rem; }
+    .scroll-box { max-height: 140px; overflow-y: auto; }
+    .step-num { width: 28px; height: 28px; border-radius: 50%; display: inline-flex;
+                align-items: center; justify-content: center; font-size: .8rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<div class="topbar text-white py-4 mb-4">
+  <div class="container">
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-ui-checks-grid fs-2"></i>
+      <div>
+        <h4 class="mb-0 fw-bold">Scantron Reader</h4>
+        <small class="opacity-75">Convert scantron answer sheets to Excel</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container pb-5">
+
+  {% if process_results is not none %}
+  <div class="alert alert-{{ 'danger' if process_results|selectattr('status','eq','error')|list else 'success' }} rounded-3 mb-4">
+    <div class="fw-bold mb-2">
+      <i class="bi bi-{{ 'x-circle' if process_results|selectattr('status','eq','error')|list else 'check-circle' }}"></i>
+      Processing {{ 'completed with errors' if process_results|selectattr('status','eq','error')|list else 'completed successfully' }}
+    </div>
+    {% for r in process_results %}
+    <div class="result-item">
+      <i class="bi bi-{{ 'check-circle-fill text-success' if r.status == 'success' else 'x-circle-fill text-danger' }} me-1"></i>
+      {{ r.message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="row g-4">
+
+    <!-- STEP 1: Students -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+          <span>
+            <span class="step-num bg-white text-primary me-2">1</span>
+            Students List
+          </span>
+          {% if students_exists %}
+          <span class="badge bg-success section-badge"><i class="bi bi-check-lg"></i> Loaded</span>
+          {% else %}
+          <span class="badge bg-danger section-badge"><i class="bi bi-x-lg"></i> Missing</span>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          {% if students_exists %}
+          <div class="alert alert-success py-2 mb-3">
+            <i class="bi bi-file-earmark-excel-fill me-1"></i> <strong>students.xlsx</strong> is loaded
+          </div>
+          {% else %}
+          <div class="alert alert-warning py-2 mb-3">
+            <i class="bi bi-exclamation-triangle me-1"></i> Upload <strong>students.xlsx</strong> to continue
+          </div>
+          {% endif %}
+          <form action="/upload/students" method="post" enctype="multipart/form-data">
+            <label class="form-label small fw-semibold text-muted">Upload / Replace students.xlsx</label>
+            <div class="input-group">
+              <input type="file" class="form-control" name="file" accept=".xlsx" required>
+              <button class="btn btn-primary" type="submit"><i class="bi bi-upload"></i> Upload</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: Questions -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+          <span>
+            <span class="step-num bg-white text-info me-2">2</span>
+            Question Files <small class="opacity-75">(optional)</small>
+          </span>
+          <span class="badge bg-light text-dark section-badge">{{ question_files|length }} file(s)</span>
+        </div>
+        <div class="card-body">
+          {% if question_files %}
+          <div class="scroll-box mb-3">
+            {% for f in question_files %}
+            <div class="file-row d-flex justify-content-between align-items-center">
+              <span><i class="bi bi-file-earmark-excel text-success me-1"></i>{{ f }}</span>
+              <form action="/delete/question/{{ f }}" method="post" class="d-inline">
+                <button class="btn btn-sm btn-link text-danger p-0" type="submit"
+                        onclick="return confirm('Remove {{ f }}?')"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="text-muted small mb-3"><i class="bi bi-info-circle me-1"></i>No question files. Answers will be processed without question labels.</p>
+          {% endif %}
+          <form action="/upload/questions" method="post" enctype="multipart/form-data">
+            <div class="input-group">
+              <input type="file" class="form-control" name="files" accept=".xlsx" multiple required>
+              <button class="btn btn-info text-white" type="submit"><i class="bi bi-upload"></i> Upload</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3: Answer Folders -->
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-warning d-flex justify-content-between align-items-center">
+          <span>
+            <span class="step-num bg-white text-warning me-2">3</span>
+            Answer Folders
+          </span>
+          <span class="badge bg-dark section-badge">{{ answer_folders|length }} folder(s)</span>
+        </div>
+        <div class="card-body">
+
+          {% if answer_folders %}
+          <div class="row g-2 mb-4">
+            {% for folder, files in answer_folders.items() %}
+            <div class="col-md-4 col-sm-6">
+              <div class="folder-card p-3">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                  <div class="fw-semibold small text-truncate me-2" title="{{ folder }}">
+                    <i class="bi bi-folder-fill text-warning me-1"></i>{{ folder }}
+                  </div>
+                  <form action="/delete/answers/{{ folder }}" method="post" class="flex-shrink-0">
+                    <button class="btn btn-sm btn-outline-danger py-0 px-1" type="submit"
+                            onclick="return confirm('Delete folder {{ folder }} and all its files?')">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </div>
+                <span class="badge bg-secondary">{{ files|length }} student(s)</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="alert alert-warning py-2 mb-4">
+            <i class="bi bi-exclamation-triangle me-1"></i> No answer folders yet. Use the form below to add one.
+          </div>
+          {% endif %}
+
+          <div class="border rounded-3 p-3 bg-light">
+            <div class="fw-semibold mb-2 small text-muted">ADD ANSWER FILES</div>
+            <form action="/upload/answers" method="post" enctype="multipart/form-data">
+              <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                  <label class="form-label small mb-1">Exam Folder Name</label>
+                  <input type="text" class="form-control" name="folder_name"
+                         placeholder="e.g. PHCHEM221-LEC-TANNINS"
+                         list="folder-list" required>
+                  <datalist id="folder-list">
+                    {% for folder in answer_folders.keys() %}
+                    <option value="{{ folder }}">
+                    {% endfor %}
+                  </datalist>
+                  <div class="form-text">Type new name or pick existing</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small mb-1">Student Answer Files (.xlsx)</label>
+                  <input type="file" class="form-control" name="files" accept=".xlsx" multiple required>
+                </div>
+                <div class="col-md-2">
+                  <button class="btn btn-warning w-100" type="submit">
+                    <i class="bi bi-upload"></i> Upload
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4: Process -->
+    <div class="col-12">
+      <div class="card border-2 border-success">
+        <div class="card-body py-4 text-center">
+          <h5 class="fw-bold mb-1"><i class="bi bi-lightning-charge-fill text-warning me-1"></i> Run Processing</h5>
+          <p class="text-muted small mb-3">Matches student codes, resolves names, and exports Excel files to Converted/</p>
+          <form action="/process" method="post" onsubmit="showLoading(this)">
+            <button class="btn btn-success btn-run" type="submit"
+                    id="run-btn"
+                    {% if not students_exists or not answer_folders %}disabled{% endif %}>
+              <span id="run-label"><i class="bi bi-play-circle-fill me-2"></i>Process All Folders</span>
+              <span id="run-spinner" class="d-none">
+                <span class="spinner-border spinner-border-sm me-2"></span>Processing…
+              </span>
+            </button>
+            {% if not students_exists %}
+            <div class="text-danger small mt-2"><i class="bi bi-arrow-up"></i> Upload students.xlsx first (Step 1)</div>
+            {% elif not answer_folders %}
+            <div class="text-danger small mt-2"><i class="bi bi-arrow-up"></i> Add answer folders first (Step 3)</div>
+            {% endif %}
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output Files -->
+    {% if output_files %}
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-file-earmark-arrow-down me-1"></i> Output Files</span>
+          <span class="badge bg-light text-dark section-badge">{{ output_files|length }} file(s)</span>
+        </div>
+        <div class="card-body">
+          <div class="row g-2">
+            {% for f in output_files %}
+            <div class="col-md-4 col-sm-6">
+              <div class="d-flex align-items-center justify-content-between border rounded-3 px-3 py-2 bg-light">
+                <span class="small text-truncate me-2" title="{{ f }}">
+                  <i class="bi bi-file-earmark-excel-fill text-success me-1"></i>{{ f }}
+                </span>
+                <div class="d-flex gap-1 flex-shrink-0">
+                  <a href="/download/{{ f }}" class="btn btn-sm btn-success" title="Download">
+                    <i class="bi bi-download"></i>
+                  </a>
+                  <form action="/delete/output/{{ f }}" method="post" class="d-inline">
+                    <button class="btn btn-sm btn-outline-danger" type="submit"
+                            onclick="return confirm('Delete {{ f }}?')" title="Delete">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div><!-- /row -->
+</div><!-- /container -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function showLoading(form) {
+  document.getElementById('run-label').classList.add('d-none');
+  document.getElementById('run-spinner').classList.remove('d-none');
+  document.getElementById('run-btn').disabled = true;
+}
+// Scroll to results if present
+{% if process_results is not none %}
+window.scrollTo({top: 0, behavior: 'smooth'});
+{% endif %}
+</script>
+</body>
+</html>
