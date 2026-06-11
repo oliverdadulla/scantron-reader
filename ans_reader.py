@@ -177,14 +177,14 @@ def run_processing(base_dir=None):
                     else:
                         display_name = re.sub(r'\*', '', scantron_name).strip()
 
-                sheetdata = pd.read_excel(filename, dtype=str, usecols=[0, 1, 5], engine="openpyxl")
+                sheetdata = pd.read_excel(filename, dtype=str, engine="openpyxl")
                 while list(sheetdata.columns)[0] != 'Responses':
                     new_header = sheetdata.iloc[0].tolist()
                     sheetdata.columns = new_header
                     sheetdata = sheetdata.iloc[1:].reset_index(drop=True)
 
                 scores = sheetdata.iloc[0:, 1].tolist()
-                correct_answers = sheetdata.iloc[0:, 2].tolist()
+                correct_answers = sheetdata.iloc[0:, 5].tolist()
                 for i in range(len(scores)):
                     if isEmpty(scores[i]) and not isEmpty(correct_answers[i]):
                         scores[i] = 'D' if correct_answers[i][1] != 'D' else 'A'
