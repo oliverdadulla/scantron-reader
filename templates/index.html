@@ -114,8 +114,14 @@
     }
     .alert-banner.success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
     .alert-banner.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+    .alert-banner.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
     .alert-banner .alert-title { font-weight: 700; margin-bottom: .3rem; }
     .alert-banner .alert-item  { padding: .1rem 0; }
+    .upload-warn {
+      background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+      border-radius: .45rem; padding: .38rem .65rem; font-size: .75rem;
+      display: flex; align-items: center; gap: .4rem; margin-top: .35rem;
+    }
 
     /* ── Upload grid ── */
     .upload-grid {
@@ -404,6 +410,18 @@
   </div>
   {% endif %}
 
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  {% for category, message in messages %}
+  <div class="alert-banner {{ category }}">
+    <div class="alert-title">
+      <i class="bi bi-exclamation-triangle-fill"></i> {{ message }}
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% endwith %}
+
   <div class="section-label">① Upload Files</div>
 
   <div class="upload-grid">
@@ -411,7 +429,7 @@
     <!-- Students List -->
     <div class="card blue">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">📋</div> Students List</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-people-fill"></i></div> Students List</div>
         {% if students_exists %}
         <span class="chip chip-green"><i class="bi bi-check-lg"></i> Loaded</span>
         {% endif %}
@@ -422,7 +440,7 @@
              ondrop="dzDrop(event,'dz-students','inp-students')">
           <input type="file" name="file" accept=".xlsx" id="inp-students"
                  onchange="scShowFile('inp-students','sc-sl-students','form-students')">
-          <span class="dz-icon">📂</span>
+          <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
           <p>Drag &amp; drop .xlsx file here</p>
           <span class="browse-btn">Browse files</span>
         </div>
@@ -430,25 +448,38 @@
       <div id="sc-sl-students">
         {% if students_exists %}
         <div class="file-item">
-          <div class="file-info"><div class="file-name">📄 students.xlsx</div></div>
+          <div class="file-info"><div class="file-name"><i class="bi bi-file-earmark-spreadsheet"></i> students.xlsx</div></div>
         </div>
         {% else %}
         <div class="empty-note">No file uploaded</div>
         {% endif %}
       </div>
       <div class="naming-hint">
-        <strong>📌 Required filename</strong>
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Required filename</strong>
         Must be named exactly <code>students.xlsx</code><br>
-        Columns: <code>StudentNo</code> · <code>LastName</code> · <code>FirstName</code>
+        Columns: <code>StudentNo</code> · <code>Fullname</code>
       </div>
     </div>
 
     <!-- Answer Folders -->
     <div class="card purple">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">📁</div> Answer Folders</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-folder2-open"></i></div> Answer Folders</div>
         <span class="chip chip-purple">{{ answer_folders|length }} folder(s)</span>
       </div>
+      <form action="/upload/answers" method="post" enctype="multipart/form-data" id="form-answers">
+        <input type="hidden" name="folder_name" id="answers-folder-name">
+        <div class="drop-zone" id="dz-answers"
+             ondragover="dzDrag(event,'dz-answers')" ondragleave="dzLeave('dz-answers')"
+             ondrop="dzDropAnswers(event)">
+          <input type="file" name="files" webkitdirectory multiple id="inp-answers"
+                 onchange="scHandleAnswerFolder()">
+          <span class="dz-icon"><i class="bi bi-folder2-open"></i></span>
+          <p>Drag &amp; drop a folder here</p>
+          <span class="browse-btn">Browse folder</span>
+        </div>
+        <div id="sc-sl-answers"></div>
+      </form>
       <div class="file-list">
         {% for folder, files in answer_folders.items() %}
         <div class="folder-row">
@@ -460,39 +491,41 @@
           </form>
         </div>
         {% else %}
-        <div class="empty-note">No folders yet</div>
+        <div class="empty-note">No folders uploaded yet</div>
         {% endfor %}
       </div>
-      <form action="/upload/answers" method="post" enctype="multipart/form-data" id="form-answers">
-        <input type="text" class="folder-input" name="folder_name"
-               placeholder="Folder name (e.g. PHCHEM221-LEC)" list="folder-datalist" required>
-        <datalist id="folder-datalist">
-          {% for folder in answer_folders.keys() %}
-          <option value="{{ folder }}">
-          {% endfor %}
-        </datalist>
-        <div class="drop-zone" style="margin-top:.5rem" id="dz-answers"
-             ondragover="dzDrag(event,'dz-answers')" ondragleave="dzLeave('dz-answers')"
-             ondrop="dzDrop(event,'dz-answers','inp-answers')">
-          <input type="file" name="files" accept=".xlsx" multiple id="inp-answers"
-                 onchange="scShowFiles('inp-answers','sc-sl-answers','form-answers')">
-          <span class="dz-icon">📂</span>
-          <p>Drag &amp; drop .xlsx files here</p>
-          <span class="browse-btn">Browse files</span>
-        </div>
-        <div id="sc-sl-answers"><div class="empty-note">No files selected</div></div>
-      </form>
       <div class="naming-hint">
-        <strong>📌 Folder naming example</strong>
-        <code>PHCHEM221-LEC</code> &nbsp;/&nbsp; <code>NCM112-LAB-GRP1</code><br>
-        Files inside: scantron output <code>.xlsx</code> (any name)
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Standard folder naming format</strong>
+        <div style="margin:.3rem 0 .25rem;padding:.3rem .5rem;background:#ede9fe;border-radius:5px;font-family:monospace;font-size:.72rem;color:#5b21b6;letter-spacing:.01em">
+          SUBJECTCODE-TYPE-SECTIONTAG
+        </div>
+        <div style="display:flex;flex-direction:column;gap:.18rem;font-size:.68rem;color:#64748b;margin-bottom:.3rem">
+          <span><b style="color:#334155">SUBJECTCODE</b> — course code e.g. <code>PHCHEM221</code>, <code>NCM112</code></span>
+          <span><b style="color:#334155">TYPE</b> — class type e.g. <code>LEC</code>, <code>LAB</code>, <code>TH</code></span>
+          <span><b style="color:#334155">SECTIONTAG</b> — section or group e.g. <code>A</code>, <code>GRP1</code>, <code>TANNINS</code></span>
+        </div>
+        <strong style="font-size:.7rem"><i class="bi bi-check-circle-fill" style="color:#16a34a"></i> Accepted examples &amp; paired question file</strong>
+        <div style="display:flex;flex-direction:column;gap:.15rem;margin-top:.2rem">
+          <div style="display:flex;align-items:center;gap:.3rem;font-size:.67rem">
+            <code>PHCHEM221-LEC-TANNINS</code><span style="color:#94a3b8">→</span><code>PHCHEM221-LEC.xlsx</code>
+          </div>
+          <div style="display:flex;align-items:center;gap:.3rem;font-size:.67rem">
+            <code>NCM112-LAB-GRP1</code><span style="color:#94a3b8">→</span><code>NCM112-LAB.xlsx</code>
+          </div>
+          <div style="display:flex;align-items:center;gap:.3rem;font-size:.67rem">
+            <code>NSCI101-TH-A</code><span style="color:#94a3b8">→</span><code>NSCI101-TH.xlsx</code>
+          </div>
+        </div>
+        <div style="margin-top:.3rem;font-size:.67rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:.2rem .4rem">
+          <i class="bi bi-exclamation-triangle-fill"></i> The part after the <em>last</em> hyphen is the section tag — everything before it must exactly match the question file name (without <code>.xlsx</code>).
+        </div>
       </div>
     </div>
 
     <!-- Question Files -->
     <div class="card green">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">❓</div> Question Files</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-question-circle-fill"></i></div> Question Files</div>
         <span class="chip chip-green">{{ question_files|length }} file(s)</span>
       </div>
       <form action="/upload/questions" method="post" enctype="multipart/form-data" id="form-questions">
@@ -501,7 +534,7 @@
              ondrop="dzDrop(event,'dz-questions','inp-questions')">
           <input type="file" name="files" accept=".xlsx" multiple id="inp-questions"
                  onchange="scShowFiles('inp-questions','sc-sl-questions','form-questions')">
-          <span class="dz-icon">📂</span>
+          <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
           <p>Drag &amp; drop .xlsx files here</p>
           <span class="browse-btn">Browse files</span>
         </div>
@@ -511,7 +544,7 @@
         <div class="file-list">
           {% for f in question_files %}
           <div class="file-item">
-            <div class="file-info"><div class="file-name">📄 {{ f }}</div></div>
+            <div class="file-info"><div class="file-name"><i class="bi bi-file-earmark-spreadsheet"></i> {{ f }}</div></div>
             <form action="/delete/question/{{ f }}" method="post" style="display:inline;margin:0">
               <button class="icon-btn" type="submit" onclick="return confirm('Remove {{ f }}?')">✕</button>
             </form>
@@ -523,9 +556,10 @@
         {% endif %}
       </div>
       <div class="naming-hint">
-        <strong>📌 Filename example</strong>
-        <code>PHCHEM221-LEC_questions.xlsx</code><br>
-        One file per exam. Any <code>.xlsx</code> name is accepted.
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename rule</strong>
+        Must match the answer folder name <em>minus its last hyphen-segment</em><br>
+        e.g. folder <code>PHCHEM221-LEC-TANNINS</code> → <code>PHCHEM221-LEC.xlsx</code><br>
+        e.g. folder <code>NCM112-LAB-GRP1</code> → <code>NCM112-LAB.xlsx</code>
       </div>
     </div>
 
@@ -536,7 +570,7 @@
       <button class="process-btn" type="submit" id="sc-process-btn"
               {% if not students_exists or not answer_folders %}disabled{% endif %}>
         <div class="btn-spinner"></div>
-        <span class="btn-label">⚡ Process Files</span>
+        <span class="btn-label"><i class="bi bi-lightning-charge-fill"></i> Process Files</span>
       </button>
     </form>
     {% if not students_exists %}
@@ -554,7 +588,7 @@
     <div class="results-grid">
       {% for f in output_files %}
       <div class="result-card">
-        <div class="result-name">📄 {{ f }}</div>
+        <div class="result-name"><i class="bi bi-file-earmark-spreadsheet"></i> {{ f }}</div>
         <div class="result-actions">
           <a href="/download/{{ f }}" class="dl-btn">
             <i class="bi bi-download"></i> Download
@@ -575,7 +609,7 @@
   <div class="reset-wrap">
     <form action="/clear" method="post"
           onsubmit="return confirm('Clear all uploaded files and start over?')">
-      <button class="reset-btn" type="submit">🗑 Clear everything and start over</button>
+      <button class="reset-btn" type="submit"><i class="bi bi-trash"></i> Clear everything and start over</button>
     </form>
   </div>
 
@@ -595,10 +629,10 @@
     <!-- Exam Template -->
     <div class="card blue">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">📋</div> Exam Template</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-file-earmark-spreadsheet"></i></div> Exam Template</div>
       </div>
       <div class="drop-zone" id="dz-exam" onclick="document.getElementById('inp-exam').click()">
-        <span class="dz-icon">📂</span>
+        <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
         <p>Drag &amp; drop .xlsx files here</p>
         <span class="browse-btn">Browse files</span>
       </div>
@@ -606,7 +640,7 @@
              onchange="afHandle('exam', this.files); this.value=''">
       <div class="file-list" id="fl-exam"><div class="empty-note">No files uploaded</div></div>
       <div class="naming-hint">
-        <strong>📌 Filename example</strong>
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename example</strong>
         <code>MLSCLIN23LAB_exam_template.xlsx</code><br>
         Suffix must be <code>_exam_template</code>
       </div>
@@ -615,11 +649,11 @@
     <!-- Tags -->
     <div class="card purple">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">🏷️</div> Tags</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-tags-fill"></i></div> Tags</div>
         <span class="chip chip-gray">Optional</span>
       </div>
       <div class="drop-zone" id="dz-tags" onclick="document.getElementById('inp-tags').click()">
-        <span class="dz-icon">📂</span>
+        <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
         <p>Drag &amp; drop .xlsx files here</p>
         <span class="browse-btn">Browse files</span>
       </div>
@@ -627,7 +661,7 @@
              onchange="afHandle('tags', this.files); this.value=''">
       <div class="file-list" id="fl-tags"><div class="empty-note">No files uploaded</div></div>
       <div class="naming-hint">
-        <strong>📌 Filename example</strong>
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename example</strong>
         <code>MLSCLIN23LAB_tags.xlsx</code><br>
         Base name must match exam template. Suffix: <code>_tags</code>
       </div>
@@ -636,11 +670,11 @@
     <!-- Co-Analysis -->
     <div class="card green">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">✅</div> Co-Analysis</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-check2-circle"></i></div> Co-Analysis</div>
         <span class="chip chip-gray">Optional</span>
       </div>
       <div class="drop-zone" id="dz-answer" onclick="document.getElementById('inp-answer').click()">
-        <span class="dz-icon">📂</span>
+        <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
         <p>Drag &amp; drop .xlsx files here</p>
         <span class="browse-btn">Browse files</span>
       </div>
@@ -648,7 +682,7 @@
              onchange="afHandle('answer', this.files); this.value=''">
       <div class="file-list" id="fl-answer"><div class="empty-note">No files uploaded</div></div>
       <div class="naming-hint">
-        <strong>📌 Filename example</strong>
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename example</strong>
         <code>MLSCLIN23LAB_correct_answer.xlsx</code><br>
         Base name must match exam template. Suffix: <code>_correct_answer</code>
       </div>
@@ -659,7 +693,7 @@
   <div class="process-wrap">
     <button class="process-btn" id="af-process-btn" onclick="afProcess()" disabled>
       <div class="btn-spinner"></div>
-      <span class="btn-label" id="af-btn-label">⚡ Process Files</span>
+      <span class="btn-label" id="af-btn-label"><i class="bi bi-lightning-charge-fill"></i> Process Files</span>
     </button>
   </div>
 
@@ -674,7 +708,7 @@
   </div>
 
   <div class="reset-wrap">
-    <button class="reset-btn" onclick="afReset()">🗑 Clear everything and start over</button>
+    <button class="reset-btn" onclick="afReset()"><i class="bi bi-trash"></i> Clear everything and start over</button>
   </div>
 
 </div></div><!-- /tab-autofill -->
@@ -693,10 +727,10 @@
     <!-- PDF Upload -->
     <div class="card rose">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">📄</div> PDF Files</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-file-earmark-pdf-fill"></i></div> PDF Files</div>
       </div>
       <div class="drop-zone" id="dz-pdf" onclick="document.getElementById('inp-pdf').click()">
-        <span class="dz-icon">📂</span>
+        <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
         <p>Drag &amp; drop .pdf files here</p>
         <span class="browse-btn">Browse files</span>
       </div>
@@ -704,7 +738,7 @@
              onchange="pdfHandle(this.files); this.value=''">
       <div class="file-list" id="fl-pdf"><div class="empty-note">No files uploaded</div></div>
       <div class="naming-hint">
-        <strong>📌 Accepted files</strong>
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Accepted files</strong>
         Any exam PDF with numbered multiple-choice questions<br>
         Supports single-column and two-column layouts
       </div>
@@ -713,7 +747,7 @@
     <!-- AI Filter Settings -->
     <div class="card amber">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">🤖</div> AI Filtering</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-robot"></i></div> AI Filtering</div>
         <span class="chip chip-gray">Optional</span>
       </div>
       <p style="font-size:.78rem;color:#64748b;line-height:1.5">
@@ -733,7 +767,7 @@
         </span>
       </div>
       <div class="naming-hint">
-        <strong>📌 Without AI</strong>
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Without AI</strong>
         Regex-based parser handles most well-formatted PDFs accurately.
         Enable AI only if you see leftover non-question rows in the output.
       </div>
@@ -742,7 +776,7 @@
     <!-- Output Format -->
     <div class="card sky">
       <div class="card-head">
-        <div class="card-title"><div class="card-icon">📊</div> Output Format</div>
+        <div class="card-title"><div class="card-icon"><i class="bi bi-table"></i></div> Output Format</div>
         <span class="chip chip-blue">Excel (.xlsx)</span>
       </div>
       <p style="font-size:.78rem;color:#64748b;margin-bottom:.35rem;line-height:1.5">
@@ -771,7 +805,7 @@
   <div class="process-wrap">
     <button class="process-btn" id="pdf-process-btn" onclick="pdfProcess()" disabled>
       <div class="btn-spinner"></div>
-      <span class="btn-label" id="pdf-btn-label">⚡ Convert to Excel</span>
+      <span class="btn-label" id="pdf-btn-label"><i class="bi bi-lightning-charge-fill"></i> Convert to Excel</span>
     </button>
   </div>
 
@@ -786,7 +820,7 @@
   </div>
 
   <div class="reset-wrap">
-    <button class="reset-btn" onclick="pdfReset()">🗑 Clear everything and start over</button>
+    <button class="reset-btn" onclick="pdfReset()"><i class="bi bi-trash"></i> Clear everything and start over</button>
   </div>
 
 </div></div><!-- /tab-pdf -->
@@ -822,25 +856,106 @@ function dzDrop(e, dzId, inputId) {
 }
 
 // ── Scantron Reader ────────────────────────────────────────────────────────
+function showUploadWarn(targetId, msg) {
+  document.getElementById(targetId).innerHTML =
+    `<div class="upload-warn"><i class="bi bi-exclamation-triangle-fill"></i> ${msg}</div>`;
+}
 function scShowFile(inputId, statusId, formId) {
   const input = document.getElementById(inputId);
   if (!input.files?.length) return;
+  const f = input.files[0];
+  if (!f.name.endsWith('.xlsx')) {
+    showUploadWarn(statusId, `"${f.name}" is not an .xlsx file. Please upload a valid Excel file.`);
+    input.value = '';
+    return;
+  }
   document.getElementById(statusId).innerHTML =
-    `<div class="file-item"><div class="file-info"><div class="file-name">📄 ${input.files[0].name}</div></div></div>`;
+    `<div class="file-item"><div class="file-info"><div class="file-name"><i class="bi bi-file-earmark-spreadsheet"></i> ${f.name}</div></div></div>`;
   document.getElementById(formId).submit();
 }
 function scShowFiles(inputId, statusId, formId) {
   const input = document.getElementById(inputId);
   if (!input.files?.length) return;
-  const items = Array.from(input.files).map(f =>
-    `<div class="file-item"><div class="file-info"><div class="file-name">📄 ${f.name}</div></div></div>`
-  ).join('');
-  document.getElementById(statusId).innerHTML = `<div class="file-list">${items}</div>`;
+  const valid = Array.from(input.files).filter(f => f.name.endsWith('.xlsx') && !f.name.startsWith('~$'));
+  const skipped = Array.from(input.files).length - valid.length;
+  if (!valid.length) {
+    showUploadWarn(statusId, 'No .xlsx files selected. Please upload valid Excel files.');
+    input.value = '';
+    return;
+  }
+  let html = '<div class="file-list">' + valid.map(f =>
+    `<div class="file-item"><div class="file-info"><div class="file-name"><i class="bi bi-file-earmark-spreadsheet"></i> ${f.name}</div></div></div>`
+  ).join('') + '</div>';
+  if (skipped) html += `<div class="upload-warn"><i class="bi bi-exclamation-triangle-fill"></i> ${skipped} non-.xlsx file(s) were ignored.</div>`;
+  document.getElementById(statusId).innerHTML = html;
   document.getElementById(formId).submit();
 }
 function scStartLoading() {
   const btn = document.getElementById('sc-process-btn');
   if (btn) { btn.classList.add('loading'); btn.disabled = true; }
+}
+
+// ── Answer Folder upload ───────────────────────────────────────────────────
+function scHandleAnswerFolder() {
+  const input = document.getElementById('inp-answers');
+  if (!input.files?.length) return;
+  const firstRel = input.files[0].webkitRelativePath;
+  if (firstRel) {
+    document.getElementById('answers-folder-name').value = firstRel.split('/')[0];
+  }
+  const xlsx = Array.from(input.files).filter(f => f.name.endsWith('.xlsx') && !f.name.startsWith('~$'));
+  if (!xlsx.length) {
+    showUploadWarn('sc-sl-answers', 'No .xlsx files found in this folder. Nothing was uploaded.');
+    return;
+  }
+  document.getElementById('sc-sl-answers').innerHTML =
+    '<div class="file-list">' + xlsx.map(f => `<div class="file-item"><div class="file-info"><div class="file-name"><i class="bi bi-file-earmark-spreadsheet"></i> ${f.name}</div></div></div>`).join('') + '</div>';
+  document.getElementById('form-answers').submit();
+}
+
+async function readDirFiles(dirEntry) {
+  const files = [];
+  const reader = dirEntry.createReader();
+  let batch;
+  do {
+    batch = await new Promise(res => reader.readEntries(res));
+    for (const entry of batch) {
+      if (entry.isFile) files.push(await new Promise(res => entry.file(res)));
+    }
+  } while (batch.length > 0);
+  return files;
+}
+
+async function dzDropAnswers(e) {
+  e.preventDefault();
+  document.getElementById('dz-answers').classList.remove('drag-over');
+  const items = e.dataTransfer.items;
+  let folderEntry = null;
+  for (const item of (items || [])) {
+    const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
+    if (entry?.isDirectory) { folderEntry = entry; break; }
+  }
+  if (!folderEntry) {
+    const input = document.getElementById('inp-answers');
+    try { input.files = e.dataTransfer.files; } catch(_) {}
+    input.dispatchEvent(new Event('change'));
+    return;
+  }
+  const folderName = folderEntry.name;
+  const allFiles  = await readDirFiles(folderEntry);
+  const xlsx      = allFiles.filter(f => f.name.endsWith('.xlsx') && !f.name.startsWith('~$'));
+  if (!xlsx.length) {
+    showUploadWarn('sc-sl-answers', `No .xlsx files found in "${folderName}". Nothing was uploaded.`);
+    return;
+  }
+  document.getElementById('sc-sl-answers').innerHTML =
+    '<div class="file-list">' + xlsx.map(f => `<div class="file-item"><div class="file-info"><div class="file-name"><i class="bi bi-file-earmark-spreadsheet"></i> ${f.name}</div></div></div>`).join('') + '</div>';
+  document.getElementById('answers-folder-name').value = folderName;
+  const fd = new FormData();
+  fd.append('folder_name', folderName);
+  xlsx.forEach(f => fd.append('files', f));
+  await fetch('/upload/answers', { method: 'POST', body: fd });
+  window.location.href = '/?tab=scantron';
 }
 
 // ── Exam Autofill ──────────────────────────────────────────────────────────
@@ -856,7 +971,7 @@ function afRender(type) {
   el.innerHTML = '<div class="file-list">' + arr.map(f => `
     <div class="file-item">
       <div class="file-info">
-        <div class="file-name" title="${f.filename}">📄 ${f.filename}</div>
+        <div class="file-name" title="${f.filename}"><i class="bi bi-file-earmark-spreadsheet"></i> ${f.filename}</div>
         <div class="file-base">base: <strong>${f.base}</strong></div>
       </div>
       <button class="icon-btn" onclick="afRemove('${type}','${f.filename}')" title="Remove">✕</button>
@@ -899,7 +1014,7 @@ async function afProcess() {
   finally {
     btn.classList.remove('loading');
     btn.disabled = afState.exam.length === 0;
-    label.textContent = '⚡ Process Files';
+    label.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Process Files';
   }
 }
 function afShowResults(results) {
@@ -913,12 +1028,12 @@ function afShowResults(results) {
     const cls    = isErr ? 'error' : hasW ? 'warn' : '';
     const badges = [
       `<span class="badge blue">${r.rows} rows</span>`,
-      r.tags    ? `<span class="badge purple">🏷️ Tags ✓</span>`   : `<span class="badge amber">No Tags</span>`,
-      r.answers ? `<span class="badge green">✅ Answers ✓</span>` : `<span class="badge amber">No Answers</span>`,
+      r.tags    ? `<span class="badge purple"><i class="bi bi-tags-fill"></i> Tags ✓</span>`   : `<span class="badge amber">No Tags</span>`,
+      r.answers ? `<span class="badge green"><i class="bi bi-check-circle-fill"></i> Answers ✓</span>` : `<span class="badge amber">No Answers</span>`,
       isErr     ? `<span class="badge red">Error</span>`          : `<span class="badge green">Done ✓</span>`,
     ].join('');
-    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item">⚠️ ${w}</div>`).join('')}</div>` : '';
-    const errMsg = isErr ? `<div class="err-msg">❌ ${r.error}</div>` : '';
+    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${w}</div>`).join('')}</div>` : '';
+    const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${r.error}</div>` : '';
     const dl     = r.output ? `<a class="dl-btn" href="/autofill/download/${encodeURIComponent(r.output)}"><i class="bi bi-download"></i> Download</a>` : '';
     return `<div class="result-card ${cls}">
       <div class="result-name">${r.base}</div>
@@ -947,7 +1062,7 @@ function pdfRenderList() {
   if (!pdfFiles.length) { el.innerHTML = '<div class="empty-note">No files uploaded</div>'; return; }
   el.innerHTML = '<div class="file-list">' + pdfFiles.map(name => `
     <div class="file-item">
-      <div class="file-info"><div class="file-name" title="${name}">📄 ${name}</div></div>
+      <div class="file-info"><div class="file-name" title="${name}"><i class="bi bi-file-earmark-pdf-fill"></i> ${name}</div></div>
       <button class="icon-btn" onclick="pdfRemove('${name}')" title="Remove">✕</button>
     </div>`).join('') + '</div>';
 }
@@ -997,7 +1112,7 @@ async function pdfProcess() {
   finally {
     btn.classList.remove('loading');
     btn.disabled = pdfFiles.length === 0;
-    label.textContent = '⚡ Convert to Excel';
+    label.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Convert to Excel';
   }
 }
 
@@ -1012,14 +1127,14 @@ function pdfShowResults(results) {
     const cls    = isErr ? 'error' : hasW ? 'warn' : '';
     const badges = [
       `<span class="badge blue">${r.questions ?? 0} questions</span>`,
-      r.ai_filtered ? `<span class="badge purple">🤖 AI filtered</span>` : '',
+      r.ai_filtered ? `<span class="badge purple"><i class="bi bi-robot"></i> AI filtered</span>` : '',
       isErr ? `<span class="badge red">Error</span>` : `<span class="badge green">Done ✓</span>`,
     ].join('');
-    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item">⚠️ ${w}</div>`).join('')}</div>` : '';
-    const errMsg = isErr ? `<div class="err-msg">❌ ${r.error}</div>` : '';
+    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${w}</div>`).join('')}</div>` : '';
+    const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${r.error}</div>` : '';
     const dl     = r.output ? `<a class="dl-btn" href="/pdf/download/${encodeURIComponent(r.output)}"><i class="bi bi-download"></i> Download</a>` : '';
     return `<div class="result-card ${cls}">
-      <div class="result-name">📄 ${r.name}</div>
+      <div class="result-name"><i class="bi bi-file-earmark-pdf-fill"></i> ${r.name}</div>
       <div class="badge-row">${badges}</div>
       ${warns}${errMsg}
       <div class="result-actions">${dl}</div>

@@ -9,7 +9,7 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from flask import Flask, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -122,7 +122,11 @@ def index():
 @app.route('/upload/students', methods=['POST'])
 def upload_students():
     f = request.files.get('file')
-    if f and f.filename.endswith('.xlsx'):
+    if not f or not f.filename:
+        flash('No file was selected. Please choose a students.xlsx file.', 'warning')
+    elif not f.filename.endswith('.xlsx'):
+        flash(f'"{f.filename}" is not an .xlsx file. Only Excel (.xlsx) files are accepted.', 'warning')
+    else:
         f.save(os.path.join(STUDENTS_DIR, 'students.xlsx'))
     return redirect('/?tab=scantron')
 
@@ -131,23 +135,43 @@ def upload_students():
 def upload_answers():
     folder_name = request.form.get('folder_name', '').strip()
     files = request.files.getlist('files')
-    if folder_name and files:
-        safe = folder_name.replace('/', '_').replace('\\', '_').replace('..', '')
-        folder_path = os.path.join(ANSWERS_DIR, safe)
-        os.makedirs(folder_path, exist_ok=True)
-        for f in files:
-            if f and f.filename.endswith('.xlsx'):
-                fname = f.filename.replace('/', '_').replace('\\', '_')
-                f.save(os.path.join(folder_path, fname))
+    if not folder_name:
+        flash('Could not determine folder name. Please try selecting the folder again.', 'warning')
+        return redirect('/?tab=scantron')
+    safe = folder_name.replace('/', '_').replace('\\', '_').replace('..', '')
+    folder_path = os.path.join(ANSWERS_DIR, safe)
+    os.makedirs(folder_path, exist_ok=True)
+    saved, skipped = 0, []
+    for f in files:
+        if f and f.filename.endswith('.xlsx'):
+            fname = f.filename.replace('/', '_').replace('\\', '_')
+            f.save(os.path.join(folder_path, fname))
+            saved += 1
+        elif f and f.filename:
+            skipped.append(os.path.basename(f.filename))
+    if saved == 0:
+        if os.path.isdir(folder_path) and not os.listdir(folder_path):
+            os.rmdir(folder_path)
+        flash(f'No .xlsx files found in "{folder_name}". Nothing was saved.', 'warning')
+    elif skipped:
+        flash(f'{len(skipped)} non-.xlsx file(s) were skipped in "{folder_name}".', 'warning')
     return redirect('/?tab=scantron')
 
 
 @app.route('/upload/questions', methods=['POST'])
 def upload_questions():
+    saved, skipped = 0, []
     for f in request.files.getlist('files'):
         if f and f.filename.endswith('.xlsx'):
             fname = secure_filename(f.filename) or f.filename
             f.save(os.path.join(QUESTIONS_DIR, fname))
+            saved += 1
+        elif f and f.filename:
+            skipped.append(os.path.basename(f.filename))
+    if saved == 0 and skipped:
+        flash(f'No .xlsx files were uploaded. {len(skipped)} file(s) were rejected (wrong format).', 'warning')
+    elif skipped:
+        flash(f'{len(skipped)} non-.xlsx file(s) were skipped.', 'warning')
     return redirect('/?tab=scantron')
 
 

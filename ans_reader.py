@@ -4,6 +4,8 @@ import re
 import glob
 import os
 import sys
+import io
+import zipfile
 
 def nameCodeCheck(name, code): # blank_values = [None, "", "  ", np.nan]
     if (pd.isna(code) or ((isinstance(code, str) and code.strip() == ""))):
@@ -62,6 +64,44 @@ def extract_name_parts(fullname):
             break
     return first, ' '.join(last_parts)
 
+def _patch_and_read_excel(filename):
+    """Patch xlsx files where <v> holds a non-numeric value (e.g. 'A','B','C','D')
+    but no t attribute, causing openpyxl to attempt int/float conversion and fail."""
+
+    def _fix_worksheet(data):
+        def _fix_cell(m):
+            c_attrs = m.group(1)
+            inner = m.group(2)
+            v_match = re.search(rb'<v>([^<]*)</v>', inner)
+            if not v_match:
+                return m.group(0)
+            v_val = v_match.group(1)
+            try:
+                float(v_val.decode('utf-8', errors='replace').strip())
+                return m.group(0)          # already a valid number — leave alone
+            except ValueError:
+                pass
+            # Non-numeric value: tag cell as t="str" so openpyxl returns it as-is
+            if b't="' in c_attrs:
+                c_attrs = re.sub(rb'\bt="[^"]*"', b't="str"', c_attrs)
+            else:
+                c_attrs = c_attrs + b' t="str"'
+            return b'<c ' + c_attrs + b'>' + inner + b'</c>'
+
+        return re.sub(rb'<c ([^>]*)>(.*?)</c>', _fix_cell, data, flags=re.DOTALL)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(filename, 'r') as zin:
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zout:
+            for info in zin.infolist():
+                data = zin.read(info.filename)
+                if info.filename.startswith('xl/worksheets/'):
+                    data = _fix_worksheet(data)
+                zout.writestr(info, data)
+    buf.seek(0)
+    return pd.read_excel(buf, dtype=str, engine="openpyxl")
+
+
 def run_processing(base_dir=None):
     if base_dir is None:
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -109,8 +149,10 @@ def run_processing(base_dir=None):
             folder_path = os.path.join(answers_folder, folder_name)
             files = glob.glob(os.path.join(folder_path, "*.xlsx"))
             output = {}
+            file_errors = []
 
             for filename in files:
+              try:
                 studentname = '.'.join(os.path.basename(filename).split(".")[:-1])
 
                 header_data = pd.read_excel(filename, dtype=str, nrows=8, engine="openpyxl")
@@ -177,7 +219,10 @@ def run_processing(base_dir=None):
                     else:
                         display_name = re.sub(r'\*', '', scantron_name).strip()
 
-                sheetdata = pd.read_excel(filename, dtype=str, engine="openpyxl")
+                try:
+                    sheetdata = pd.read_excel(filename, dtype=str, engine="openpyxl")
+                except (ValueError, TypeError):
+                    sheetdata = _patch_and_read_excel(filename)
                 while list(sheetdata.columns)[0] != 'Responses':
                     new_header = sheetdata.iloc[0].tolist()
                     sheetdata.columns = new_header
@@ -187,10 +232,14 @@ def run_processing(base_dir=None):
                 correct_answers = sheetdata.iloc[0:, 5].tolist()
                 for i in range(len(scores)):
                     if isEmpty(scores[i]) and not isEmpty(correct_answers[i]):
-                        scores[i] = 'D' if correct_answers[i][1] != 'D' else 'A'
+                        ca = str(correct_answers[i])
+                        correct_letter = ca[1] if len(ca) >= 2 else ca
+                        scores[i] = 'D' if correct_letter != 'D' else 'A'
 
                 scores.insert(0, studentcode)
                 output[display_name] = scores
+              except Exception as fe:
+                file_errors.append(f'{os.path.basename(filename)}: {fe}')
 
             final_df = pd.DataFrame(output).T
             max_colno = final_df.shape[1]
@@ -210,8 +259,11 @@ def run_processing(base_dir=None):
 
             out_file = os.path.join(output_folder, folder_name + ".xlsx")
             final_df.to_excel(out_file, index=True)
+            msg = f'{folder_name} {questions_status}'
+            if file_errors:
+                msg += f' | skipped {len(file_errors)} file(s): ' + '; '.join(file_errors)
             results.append({'folder': folder_name, 'status': 'success',
-                            'message': f'{folder_name} {questions_status}',
+                            'message': msg,
                             'output': folder_name + '.xlsx'})
 
         except Exception as e:
