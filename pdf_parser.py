@@ -5,11 +5,23 @@ from typing import Optional
 QUESTION_START_RE = re.compile(r"(?:^|\n)[ \t]*(\d+)\.[ \t]", re.MULTILINE)
 QUESTION_NUMBER_RE = re.compile(r"^\s*(\d+)\.\s*(.+)", re.DOTALL)
 CHOICE_RE = re.compile(
-    r"\b([A-Da-d])[.)]\s*(.*?)(?=\s+[A-Da-d][.)]\s|\Z)",
+    r"\b([A-Za-z])[.)]\s*(.*?)(?=\s+[A-Za-z][.)]\s|\Z)",
     re.DOTALL,
 )
 FIRST_CHOICE_RE = re.compile(r"\b[Aa][.)]\s", re.IGNORECASE)
+
+_CHOICE_COL_MAP = {"A": "Choice1", "B": "Choice2", "C": "Choice_3", "D": "Choice_4"}
+
+
+def _choice_col_name(letter: str) -> str:
+    if letter in _CHOICE_COL_MAP:
+        return _CHOICE_COL_MAP[letter]
+    n = ord(letter.upper()) - ord("A") + 1
+    return f"Choice_{n}"
+
+
 HEADER_STRIP_RE = re.compile(r"^.*?(?=\n[ \t]*1\.[ \t])", re.DOTALL)
+_STARTS_WITH_Q = re.compile(r"^\s*\d+\.\s")
 
 # ── Structural junk detectors (no hardcoded vocabulary) ──────────────────────
 
@@ -50,16 +62,34 @@ def parse_questions(full_text: str) -> list[dict]:
 
 
 def _strip_header(text: str) -> str:
+    # If the text already starts with a question number, there is no header.
+    if _STARTS_WITH_Q.match(text):
+        return text
     m = HEADER_STRIP_RE.match(text)
     return text[m.end():] if m else text
 
 
 def _split_into_blocks(text: str) -> list[str]:
     matches = list(QUESTION_START_RE.finditer(text))
+
+    # Filter out matches that are numbered list items inside a question rather
+    # than real question numbers.  Heuristic: once we have seen a question
+    # numbered ≥ 10, any subsequent match whose number is < 10 is treated as a
+    # sub-item (e.g. "1. Room Air" inside Q14) and ignored.
+    real_matches = []
+    max_q_no = 0
+    for m in matches:
+        n = int(m.group(1))
+        if n < 10 and max_q_no >= 10:
+            continue  # numbered list item inside a later question
+        real_matches.append(m)
+        if n > max_q_no:
+            max_q_no = n
+
     blocks = []
-    for i, m in enumerate(matches):
+    for i, m in enumerate(real_matches):
         start = m.start(1)
-        end = matches[i + 1].start(1) if i + 1 < len(matches) else len(text)
+        end = real_matches[i + 1].start(1) if i + 1 < len(real_matches) else len(text)
         block = text[start:end].strip()
         if block:
             blocks.append(block)
@@ -131,7 +161,7 @@ def _parse_block(block: str) -> Optional[dict]:
 
     choices = _extract_choices(choices_text)
 
-    return {
+    result: dict = {
         "Question No.": question_no,
         "Question": question_text,
         "Choice1": choices.get("A", ""),
@@ -139,14 +169,16 @@ def _parse_block(block: str) -> Optional[dict]:
         "Choice_3": choices.get("C", ""),
         "Choice_4": choices.get("D", ""),
     }
+    for letter in sorted(choices):
+        if letter not in ("A", "B", "C", "D"):
+            result[_choice_col_name(letter)] = choices[letter]
+    return result
 
 
 def _extract_choices(choices_text: str) -> dict:
-    choices = {"A": "", "B": "", "C": "", "D": ""}
+    choices: dict[str, str] = {}
     if not choices_text.strip():
         return choices
     for label, text in CHOICE_RE.findall(choices_text):
-        label = label.upper()
-        if label in choices:
-            choices[label] = _clean_text(text)
+        choices[label.upper()] = _clean_text(text)
     return choices
