@@ -3,8 +3,8 @@ from typing import Optional
 
 # Ordered most-specific first so a longer suffix wins before a shorter one.
 _PATTERNS = [
-    (re.compile(r"-D\d+-CO\d+[a-zA-Z]*$"),   "Competency"),
-    (re.compile(r"-D\d+-ILO\d+[a-zA-Z]*$"),  "Content Standards"),
+    (re.compile(r"-D\d+-CO\d+(\.\d+)*[a-zA-Z]*$"),   "Competency"),
+    (re.compile(r"-D\d+-ILO\d+(\.\d+)*[a-zA-Z]*$"),  "Content Standards"),
     (re.compile(r"-TS-[A-Z]+$"),    "THINKING SKILLS"),
     (re.compile(r"-D\d+$"),         "TOPIC"),
 ]
