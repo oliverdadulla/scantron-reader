@@ -31,11 +31,11 @@ AUTOFILL_TEMP_BASE = Path(BASE_DIR) / 'temp_sessions'
 AUTOFILL_TEMP_BASE.mkdir(parents=True, exist_ok=True)
 SESSION_TTL = 2 * 60 * 60  # 2 hours
 
-from config import CORRECT_ANSWER_SUFFIX, EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX
+from config import COMPLETED_SUFFIX, CORRECT_ANSWER_SUFFIX, EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX
 from answer_filler import apply_answers, build_answer_lookup
 from loader import load_answers, load_main, load_mapping
 from merger import apply_lookup, build_lookup
-from writer import write_output
+from writer import write_output, prepare_filled_df
 
 ALL_SUFFIXES = (EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX, CORRECT_ANSWER_SUFFIX)
 
@@ -215,6 +215,23 @@ def download(filename):
     return 'File not found', 404
 
 
+@app.route('/preview/<filename>')
+def preview_output(filename):
+    import pandas as pd
+    fp = os.path.join(CONVERTED_DIR, filename)
+    if not os.path.isfile(fp):
+        return jsonify({'error': 'File not found.'}), 404
+    try:
+        df = pd.read_excel(fp, engine='openpyxl').fillna('')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    return jsonify({
+        'columns': [str(c) for c in df.columns],
+        'preview': df.astype(str).values.tolist(),
+        'total': len(df),
+    })
+
+
 @app.route('/clear', methods=['POST'])
 def clear_all():
     for d in (STUDENTS_DIR, ANSWERS_DIR, QUESTIONS_DIR, CONVERTED_DIR):
@@ -277,7 +294,7 @@ def autofill_process():
         item = {
             'base': base, 'exam': exam_path.name,
             'tags': None, 'answers': None, 'output': None,
-            'rows': 0, 'status': 'ok', 'warnings': [],
+            'rows': 0, 'status': 'ok', 'warnings': [], 'columns': [], 'preview': [],
         }
         try:
             template_df, main_df, sheet_names = load_main(str(exam_path))
@@ -299,9 +316,13 @@ def autofill_process():
             else:
                 item['warnings'].append('No tags file — metadata columns left blank')
 
-            out_name = f'{base}_completed.xlsx'
+            out_name = f'{base}{COMPLETED_SUFFIX}.xlsx'
             write_output(template_df, main_df, sheet_names, str(output_dir / out_name))
             item['output'] = out_name
+
+            preview_df = prepare_filled_df(main_df)
+            item['columns'] = [str(c) for c in preview_df.columns]
+            item['preview'] = preview_df.fillna('').astype(str).values.tolist()
 
         except Exception as exc:
             item['status'] = 'error'
@@ -347,10 +368,31 @@ def autofill_clear():
 
 
 # ── PDF to Excel routes ───────────────────────────────────────────────────────
-from pdf_extractor import extract_text as pdf_extract_text
+from pdf_extractor import extract_text as pdf_extract_text, detect_layout as pdf_detect_layout
 from pdf_parser    import parse_questions
-from pdf_writer    import save_to_excel as pdf_save_to_excel
-from pdf_grok_filter import filter_questions as pdf_filter_questions
+from pdf_writer    import build_dataframe as pdf_build_dataframe, write_dataframe as pdf_write_dataframe
+
+QUESTIONNAIRE_EXTS = ('.pdf',)
+
+_CHOICE_COL_FOR_INDEX = {1: 'Choice1', 2: 'Choice2', 3: 'Choice_3', 4: 'Choice_4'}
+
+
+def _choice_col_for_index(n: int) -> str:
+    return _CHOICE_COL_FOR_INDEX.get(n, f'Choice_{n}')
+
+
+def _pad_choices(questions: list[dict], min_choices: int) -> list[dict]:
+    """Ensure every question has at least min_choices Choice columns (blank if
+    missing), so a batch of files stays column-consistent in the output."""
+    if min_choices <= 4:
+        return questions
+    padded = []
+    for q in questions:
+        q = dict(q)
+        for n in range(1, min_choices + 1):
+            q.setdefault(_choice_col_for_index(n), '')
+        padded.append(q)
+    return padded
 
 
 def get_pdf_session_dir() -> Path:
@@ -370,11 +412,19 @@ def pdf_upload():
     uploaded = []
     for f in request.files.getlist('files'):
         name = Path(f.filename).name
-        if not name.lower().endswith('.pdf'):
+        if not name.lower().endswith(QUESTIONNAIRE_EXTS):
             continue
         f.save(dest / name)
-        uploaded.append(name)
+        layout = _detect_file_layout(dest / name)
+        uploaded.append({'name': name, 'layout': layout})
     return jsonify({'uploaded': uploaded})
+
+
+def _detect_file_layout(path: Path) -> dict:
+    try:
+        return pdf_detect_layout(path)
+    except Exception:
+        return {'pages': [], 'overall': 'single'}
 
 
 @app.route('/pdf/remove/<filename>', methods=['DELETE'])
@@ -387,47 +437,48 @@ def pdf_remove(filename):
 
 @app.route('/pdf/process', methods=['POST'])
 def pdf_process():
-    data       = request.get_json(silent=True) or {}
-    api_key    = data.get('api_key', '').strip()
-    use_ai     = data.get('use_ai', False)
+    data        = request.get_json(silent=True) or {}
+    layouts     = data.get('layouts', {})      # {filename: 'auto'|'single'|'double'}
+    min_choices = data.get('min_choices', {})  # {filename: 4-8}
 
     session_dir = get_pdf_session_dir()
     input_dir   = session_dir / 'input'
     output_dir  = session_dir / 'output'
     output_dir.mkdir(exist_ok=True)
 
-    pdf_files = sorted(input_dir.glob('*.pdf')) if input_dir.exists() else []
-    if not pdf_files:
+    input_files = sorted(
+        p for p in (input_dir.glob('*') if input_dir.exists() else [])
+        if p.suffix.lower() in QUESTIONNAIRE_EXTS
+    )
+    if not input_files:
         return jsonify({'error': 'No PDF files uploaded.'}), 400
 
     results = []
-    for pdf_path in pdf_files:
+    for pdf_path in input_files:
         item = {'name': pdf_path.name, 'status': 'ok', 'questions': 0,
-                'output': None, 'warnings': [], 'ai_filtered': False}
+                'output': None, 'warnings': [], 'columns': [], 'preview': []}
         try:
-            full_text = pdf_extract_text(pdf_path)
+            mode = layouts.get(pdf_path.name, 'auto')
+            full_text = pdf_extract_text(pdf_path, mode=mode)
             questions = parse_questions(full_text)
 
             if not questions:
-                item['status']  = 'error'
-                item['error']   = 'No questions found in this PDF.'
+                item['status'] = 'error'
+                item['error']  = 'No questions found in this file.'
                 results.append(item)
                 continue
 
-            if use_ai:
-                try:
-                    before = len(questions)
-                    questions = pdf_filter_questions(questions, api_key)
-                    removed = before - len(questions)
-                    item['ai_filtered'] = True
-                    if removed:
-                        item['warnings'].append(f'AI removed {removed} non-question item(s)')
-                except Exception as e:
-                    item['warnings'].append(f'AI filter skipped: {e}')
+            n_choices = int(min_choices.get(pdf_path.name) or 4)
+            questions = _pad_choices(questions, n_choices)
 
-            out_path = pdf_save_to_excel(questions, pdf_path, output_dir)
+            df = pdf_build_dataframe(questions)
+            out_path = output_dir / (pdf_path.stem + '.xlsx')
+            pdf_write_dataframe(df, out_path)
+
             item['questions'] = len(questions)
             item['output']    = out_path.name
+            item['columns']   = [str(c) for c in df.columns]
+            item['preview']   = df.fillna('').astype(str).values.tolist()
 
         except Exception as exc:
             item['status'] = 'error'

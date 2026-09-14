@@ -5,7 +5,8 @@ OUTPUT_DIR = "output"
 
 EXAM_TEMPLATE_SUFFIX = "_exam_template"
 TAGS_SUFFIX = "_tags"
-CORRECT_ANSWER_SUFFIX = "_correct_answer"
+CORRECT_ANSWER_SUFFIX = "_co-analysis"
+COMPLETED_SUFFIX = "_completed"
 
 TEMPLATE_SHEET_INDEX = 0
 DATA_SHEET_INDEX = 1

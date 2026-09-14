@@ -170,32 +170,6 @@
     .chip-rose   { background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; }
     .chip-amber  { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
 
-    /* ── AI toggle ── */
-    .toggle-row {
-      display: flex; align-items: center; gap: .6rem;
-      font-size: .82rem; font-weight: 500; color: #374151; cursor: pointer;
-    }
-    .toggle-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: #f59e0b; }
-    .api-key-input {
-      width: 100%; border: 1.5px solid #e5e7eb; border-radius: 8px;
-      padding: .35rem .65rem; font-size: .8rem; outline: none;
-      transition: border-color .15s; font-family: monospace; color: #1e293b;
-    }
-    .api-key-input:focus { border-color: #f59e0b; }
-    .api-key-wrap { display: none; flex-direction: column; gap: .35rem; }
-    .api-key-wrap.visible { display: flex; }
-
-    /* ── Output cols list ── */
-    .col-list {
-      display: flex; flex-direction: column; gap: .22rem;
-      max-height: 200px; overflow-y: auto;
-    }
-    .col-item {
-      font-size: .7rem; color: #475569;
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px;
-      padding: .2rem .45rem; font-family: monospace;
-    }
-
     /* ── Drop zone ── */
     .drop-zone {
       border: 2px dashed #e2e8f0;
@@ -230,6 +204,7 @@
       padding: .32rem .5rem;
       background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
     }
+    .file-item.stacked { flex-wrap: wrap; align-items: stretch; }
     .file-info { overflow: hidden; flex: 1; }
     .file-name {
       font-size: .76rem; font-weight: 500; color: #334155;
@@ -242,6 +217,23 @@
       border-radius: 4px; transition: color .15s; line-height: 1;
     }
     .icon-btn:hover { color: #ef4444; }
+
+    /* ── Column-layout row (per uploaded file) ── */
+    .layout-row {
+      display: flex; align-items: center; gap: .35rem;
+      width: 100%; margin-top: .2rem;
+    }
+    .layout-badge {
+      font-size: .64rem; font-weight: 600; white-space: nowrap;
+      padding: .1rem .4rem; border-radius: 20px;
+      background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;
+    }
+    .layout-badge.mixed { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+    .layout-select {
+      font-size: .68rem; color: #334155; background: white;
+      border: 1px solid #e2e8f0; border-radius: 5px;
+      padding: .1rem .3rem; font-family: inherit; flex: 1; min-width: 0;
+    }
 
     /* ── Folder input ── */
     .folder-input {
@@ -269,7 +261,10 @@
     }
 
     /* ── Process wrap ── */
-    .process-wrap { text-align: center; margin: 1.25rem 0 .5rem; }
+    .process-wrap {
+      text-align: center; margin: 1.25rem 0 .5rem;
+      display: flex; justify-content: center; flex-wrap: wrap; gap: .7rem;
+    }
     .process-btn {
       display: inline-flex; align-items: center; gap: .5rem;
       background: linear-gradient(135deg, #be123c, #e11d48);
@@ -304,17 +299,6 @@
       cursor: pointer; text-decoration: none; transition: background .15s;
     }
     .dl-all-btn:hover { background: #1e293b; }
-    .results-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: .9rem;
-    }
-    .result-card {
-      background: white; border-radius: 12px; padding: 1.1rem;
-      box-shadow: 0 1px 4px rgba(0,0,0,.07); border-left: 4px solid #10b981;
-    }
-    .result-card.warn  { border-left-color: #f59e0b; }
-    .result-card.error { border-left-color: #ef4444; }
     .result-name { font-weight: 600; font-size: .9rem; color: #1e293b; margin-bottom: .5rem; }
     .badge-row { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .6rem; }
     .badge {
@@ -357,6 +341,147 @@
       cursor: pointer; font-family: inherit; transition: all .15s;
     }
     .reset-btn:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+
+    /* ── Per-file column-layout radio + choices select ── */
+    .radio-group { display: flex; gap: .55rem; flex-wrap: wrap; }
+    .radio-group label {
+      display: flex; align-items: center; gap: .22rem;
+      font-size: .68rem; color: #334155; cursor: pointer; white-space: nowrap;
+    }
+    .radio-group input[type=radio] { accent-color: var(--accent); margin: 0; cursor: pointer; }
+    .choices-row { display: flex; align-items: center; gap: .4rem; width: 100%; margin-top: .25rem; }
+
+    /* ── Excel preview table (per converted file, before download) ── */
+    .preview-card {
+      background: white; border-radius: 12px; padding: 1rem 1.1rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07); border-left: 4px solid #10b981;
+      margin-bottom: .9rem;
+    }
+    .preview-card.warn  { border-left-color: #f59e0b; }
+    .preview-card.error { border-left-color: #ef4444; }
+    /* Horizontal scroll lives on the outer wrap, vertical scroll on the inner
+       div — so the horizontal scrollbar sits below the table as its own
+       fixed control, instead of overlaying/blocking the bottom row inside a
+       single overflow:auto box. */
+    .preview-table-wrap {
+      overflow-x: auto; overflow-y: hidden;
+      border: 1px solid #e2e8f0; border-radius: 8px; margin: .6rem 0;
+    }
+    .preview-table-scroll { overflow-y: auto; max-height: 460px; }
+    .preview-table { border-collapse: collapse; width: 100%; font-size: .72rem; }
+    .preview-table th, .preview-table td {
+      padding: .35rem .55rem; border-bottom: 1px solid #f1f5f9; text-align: left;
+      white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .preview-table thead { position: sticky; top: 0; z-index: 1; }
+    .preview-table th { background: #f8fafc; color: #475569; font-weight: 600; }
+    .preview-table tbody tr:last-child td { border-bottom: none; }
+    .preview-table .item-no-row th {
+      font-size: .64rem; font-weight: 500; color: #94a3b8;
+      text-align: center; padding: .2rem .55rem; background: #fcfcfd;
+    }
+    /* Hover + click-to-select a row, so it's easy to keep your place while
+       scrolling a long preview. */
+    .preview-table tbody tr { cursor: pointer; }
+    .preview-table tbody tr:hover td { background: #eff6ff; }
+    .preview-table tbody tr.row-selected td { background: #bfdbfe; }
+
+    /* ── Clickable "preview required format" link ── */
+    .preview-link {
+      display: inline-flex; align-items: center; gap: .4rem;
+      background: var(--accent-bg); border: 1px solid var(--accent);
+      color: var(--accent); font-size: .74rem; font-weight: 600;
+      font-family: inherit; cursor: pointer;
+      padding: .38rem .75rem; border-radius: 20px; margin-top: .55rem;
+      transition: background .15s, color .15s, transform .15s;
+    }
+    .preview-link:hover { background: var(--accent); color: white; transform: translateY(-1px); }
+
+    /* ── Required-format preview modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(15,23,42,.55);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; padding: 1rem; backdrop-filter: blur(2px);
+    }
+    .modal-box {
+      background: white; border-radius: 18px; width: min(1200px, 96vw);
+      max-height: 92vh; display: flex; flex-direction: column;
+      box-shadow: 0 24px 60px rgba(0,0,0,.35); overflow: hidden;
+    }
+    .modal-head {
+      display: flex; align-items: center; gap: .8rem;
+      padding: 1.15rem 1.3rem; flex-shrink: 0; color: white;
+      background: linear-gradient(135deg, var(--modal-accent, #3b82f6), var(--modal-accent2, #60a5fa));
+    }
+    .modal-head-icon {
+      width: 40px; height: 40px; border-radius: 11px; flex-shrink: 0;
+      background: rgba(255,255,255,.22);
+      display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
+    }
+    .modal-title { font-weight: 700; font-size: 1.02rem; line-height: 1.3; }
+    .modal-subtitle { font-size: .76rem; opacity: .92; margin-top: .12rem; }
+    .modal-close-btn {
+      margin-left: auto; background: rgba(255,255,255,.18); border: none; color: white;
+      width: 30px; height: 30px; border-radius: 9px; cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s;
+    }
+    .modal-close-btn:hover { background: rgba(255,255,255,.32); }
+    .modal-body {
+      padding: 1.3rem 1.4rem 1.4rem; overflow-y: auto;
+      flex: 1; display: flex; flex-direction: column; min-height: 0;
+    }
+    .modal-intro {
+      font-size: .85rem; color: #475569; line-height: 1.55; margin: 0 0 1.1rem;
+    }
+    .modal-intro strong { color: #1e293b; }
+
+    /* ── Excel-style spreadsheet preview ── */
+    /* Same split as .preview-table-wrap: horizontal scroll outside, vertical
+       scroll on the inner div, so the horizontal scrollbar never overlays
+       the last visible row. */
+    .xl-wrap {
+      overflow-x: auto; overflow-y: hidden;
+      border: 1px solid #d1d5db; border-radius: 7px;
+    }
+    .xl-wrap-scroll { overflow-y: auto; max-height: 68vh; }
+    .xl-table {
+      border-collapse: collapse; width: 100%;
+      font-family: -apple-system, 'Segoe UI', Calibri, Arial, sans-serif;
+      font-size: .84rem;
+    }
+    .xl-table th, .xl-table td {
+      border: 1px solid #d9d9d9; padding: .55rem .9rem; text-align: left; white-space: nowrap;
+    }
+    .xl-table thead { position: sticky; top: 0; z-index: 2; }
+    .xl-colletter-row th {
+      background: #f3f2f1; color: #616161; font-weight: 500;
+      text-align: center; font-size: .7rem; padding: .28rem .5rem;
+    }
+    .xl-corner { background: #e6e6e6; }
+    .xl-rownum {
+      background: #f3f2f1; color: #616161; font-weight: 500; text-align: center;
+    }
+    .xl-header-row th { background: #4472c4; color: white; font-weight: 600; }
+    .xl-header-row th.optional { background: #8faadc; }
+    .xl-table tbody tr:nth-child(odd)  td:not(.xl-rownum) { background: #ffffff; }
+    .xl-table tbody tr:nth-child(even) td:not(.xl-rownum) { background: #f2f6fc; }
+    .xl-table td.optional { color: #94a3b8; font-style: italic; }
+    /* Hover + click-to-select a row, so it's easy to keep your place while
+       scrolling a long sheet. Matches the zebra rules' specificity so it
+       reliably wins over the striping. */
+    .xl-table tbody tr { cursor: pointer; }
+    .xl-table tbody tr:hover td:not(.xl-rownum) { background: #eff6ff; }
+    .xl-table tbody tr:hover td.xl-rownum { background: #dbeafe; }
+    .xl-table tbody tr.row-selected td:not(.xl-rownum) { background: #bfdbfe; }
+    .xl-table tbody tr.row-selected td.xl-rownum { background: #93c5fd; }
+    .modal-note {
+      display: flex; gap: .55rem; align-items: flex-start;
+      background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+      border-radius: 10px; padding: .65rem .85rem; margin-top: 1.1rem;
+      font-size: .77rem; line-height: 1.55;
+    }
+    .modal-note i { margin-top: .1rem; flex-shrink: 0; }
   </style>
 </head>
 <body data-scroll="{{ 'true' if process_results is not none else 'false' }}">
@@ -457,7 +582,9 @@
       <div class="naming-hint">
         <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Required filename</strong>
         Must be named exactly <code>students.xlsx</code><br>
-        Columns: <code>StudentNo</code> · <code>Fullname</code>
+        <button type="button" class="preview-link" onclick="showFormatPreview('students')">
+          <i class="bi bi-table"></i> Preview required columns
+        </button>
       </div>
     </div>
 
@@ -495,30 +622,26 @@
         {% endfor %}
       </div>
       <div class="naming-hint">
-        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Standard folder naming format</strong>
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Exact folder naming format</strong>
         <div style="margin:.3rem 0 .25rem;padding:.3rem .5rem;background:#ede9fe;border-radius:5px;font-family:monospace;font-size:.72rem;color:#5b21b6;letter-spacing:.01em">
           SUBJECTCODE-TYPE-SECTIONTAG
         </div>
-        <div style="display:flex;flex-direction:column;gap:.18rem;font-size:.68rem;color:#64748b;margin-bottom:.3rem">
-          <span><b style="color:#334155">SUBJECTCODE</b> — course code e.g. <code>PHCHEM221</code>, <code>NCM112</code></span>
-          <span><b style="color:#334155">TYPE</b> — class type e.g. <code>LEC</code>, <code>LAB</code>, <code>TH</code></span>
-          <span><b style="color:#334155">SECTIONTAG</b> — section or group e.g. <code>A</code>, <code>GRP1</code>, <code>TANNINS</code></span>
+        <div style="display:flex;flex-direction:column;gap:.18rem;font-size:.68rem;color:#64748b;margin-bottom:.4rem">
+          <span><b style="color:#334155">SUBJECTCODE</b> — course code, e.g. <code>PHCHEM222</code></span>
+          <span><b style="color:#334155">TYPE</b> — class type, e.g. <code>LEC</code></span>
+          <span><b style="color:#334155">SECTIONTAG</b> — section or group, e.g. <code>TANNINS</code></span>
         </div>
-        <strong style="font-size:.7rem"><i class="bi bi-check-circle-fill" style="color:#16a34a"></i> Accepted examples &amp; paired question file</strong>
-        <div style="display:flex;flex-direction:column;gap:.15rem;margin-top:.2rem">
-          <div style="display:flex;align-items:center;gap:.3rem;font-size:.67rem">
-            <code>PHCHEM221-LEC-TANNINS</code><span style="color:#94a3b8">→</span><code>PHCHEM221-LEC.xlsx</code>
-          </div>
-          <div style="display:flex;align-items:center;gap:.3rem;font-size:.67rem">
-            <code>NCM112-LAB-GRP1</code><span style="color:#94a3b8">→</span><code>NCM112-LAB.xlsx</code>
-          </div>
-          <div style="display:flex;align-items:center;gap:.3rem;font-size:.67rem">
-            <code>NSCI101-TH-A</code><span style="color:#94a3b8">→</span><code>NSCI101-TH.xlsx</code>
-          </div>
+        <div style="display:flex;align-items:center;gap:.3rem;font-size:.67rem">
+          <span style="color:#64748b">Answer Folder</span> <code>PHCHEM222-LEC-TANNINS</code>
+          <span style="color:#94a3b8">→</span>
+          <span style="color:#64748b">Question File</span> <code>PHCHEM222-LEC.xlsx</code>
         </div>
-        <div style="margin-top:.3rem;font-size:.67rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:.2rem .4rem">
-          <i class="bi bi-exclamation-triangle-fill"></i> The part after the <em>last</em> hyphen is the section tag — everything before it must exactly match the question file name (without <code>.xlsx</code>).
+        <div style="margin-top:.4rem;font-size:.67rem;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:.3rem .5rem">
+          <i class="bi bi-exclamation-triangle-fill"></i> Only the text after the <em>last</em> hyphen is SECTIONTAG. Everything before it (<code>SUBJECTCODE-TYPE</code>) must exactly match this folder's <strong>Question File</strong> name, minus <code>.xlsx</code>.
         </div>
+        <button type="button" class="preview-link" onclick="showFormatPreview('answerfile')">
+          <i class="bi bi-table"></i> Preview a scanned student file
+        </button>
       </div>
     </div>
 
@@ -557,9 +680,15 @@
       </div>
       <div class="naming-hint">
         <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename rule</strong>
-        Must match the answer folder name <em>minus its last hyphen-segment</em><br>
-        e.g. folder <code>PHCHEM221-LEC-TANNINS</code> → <code>PHCHEM221-LEC.xlsx</code><br>
-        e.g. folder <code>NCM112-LAB-GRP1</code> → <code>NCM112-LAB.xlsx</code>
+        Must match its Answer Folder's name minus the section tag — keep <code>SUBJECTCODE-TYPE</code> only:
+        <div style="display:flex;align-items:center;gap:.3rem;font-size:.67rem;margin-top:.3rem">
+          <span style="color:#64748b">Answer Folder</span> <code>PHCHEM222-LEC-TANNINS</code>
+          <span style="color:#94a3b8">→</span>
+          <span style="color:#64748b">Question File</span> <code>PHCHEM222-LEC.xlsx</code>
+        </div>
+        <button type="button" class="preview-link" onclick="showFormatPreview('questions')">
+          <i class="bi bi-table"></i> Preview required columns
+        </button>
       </div>
     </div>
 
@@ -583,12 +712,13 @@
   {% if output_files %}
   <div class="results-section">
     <div class="results-header">
-      <div class="section-label" style="margin:0">② Download Results</div>
+      <div class="section-label" style="margin:0">② Preview &amp; Download</div>
     </div>
-    <div class="results-grid">
+    <div id="sc-results-list">
       {% for f in output_files %}
-      <div class="result-card">
+      <div class="preview-card" data-filename="{{ f }}">
         <div class="result-name"><i class="bi bi-file-earmark-spreadsheet"></i> {{ f }}</div>
+        <div class="sc-preview-slot"><div class="empty-note">Loading preview…</div></div>
         <div class="result-actions">
           <a href="/download/{{ f }}" class="dl-btn">
             <i class="bi bi-download"></i> Download
@@ -641,8 +771,11 @@
       <div class="file-list" id="fl-exam"><div class="empty-note">No files uploaded</div></div>
       <div class="naming-hint">
         <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename example</strong>
-        <code>MLSCLIN23LAB_exam_template.xlsx</code><br>
-        Suffix must be <code>_exam_template</code>
+        <code>PHCHEM222-LEC_exam_template.xlsx</code><br>
+        Suffix must be <code>_exam_template</code><br>
+        <button type="button" class="preview-link" onclick="showFormatPreview('exam')">
+          <i class="bi bi-table"></i> Preview required columns
+        </button>
       </div>
     </div>
 
@@ -662,8 +795,11 @@
       <div class="file-list" id="fl-tags"><div class="empty-note">No files uploaded</div></div>
       <div class="naming-hint">
         <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename example</strong>
-        <code>MLSCLIN23LAB_tags.xlsx</code><br>
-        Base name must match exam template. Suffix: <code>_tags</code>
+        <code>PHCHEM222-LEC_tags.xlsx</code><br>
+        Base name must match exam template. Suffix: <code>_tags</code><br>
+        <button type="button" class="preview-link" onclick="showFormatPreview('tags')">
+          <i class="bi bi-table"></i> Preview required columns
+        </button>
       </div>
     </div>
 
@@ -683,8 +819,11 @@
       <div class="file-list" id="fl-answer"><div class="empty-note">No files uploaded</div></div>
       <div class="naming-hint">
         <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename example</strong>
-        <code>MLSCLIN23LAB_correct_answer.xlsx</code><br>
-        Base name must match exam template. Suffix: <code>_correct_answer</code>
+        <code>PHCHEM222-LEC_co-analysis.xlsx</code><br>
+        Base name must match exam template. Suffix: <code>_co-analysis</code><br>
+        <button type="button" class="preview-link" onclick="showFormatPreview('answer')">
+          <i class="bi bi-table"></i> Preview required columns
+        </button>
       </div>
     </div>
 
@@ -699,12 +838,12 @@
 
   <div class="results-section hidden" id="af-results-section">
     <div class="results-header">
-      <div class="section-label" style="margin:0">② Download Results</div>
+      <div class="section-label" style="margin:0">② Preview &amp; Download</div>
       <a class="dl-all-btn" href="/autofill/download-all">
         <i class="bi bi-download"></i> Download All (.zip)
       </a>
     </div>
-    <div class="results-grid" id="af-results-grid"></div>
+    <div id="af-results-list"></div>
   </div>
 
   <div class="reset-wrap">
@@ -713,6 +852,21 @@
 
 </div></div><!-- /tab-autofill -->
 
+<!-- Required-format preview modal (shared: exam template / tags / students) -->
+<div class="modal-overlay" id="format-preview-overlay" style="display:none" onclick="if(event.target===this) closeFormatPreview()">
+  <div class="modal-box">
+    <div class="modal-head" id="format-preview-head">
+      <div class="modal-head-icon" id="format-preview-icon"><i class="bi bi-table"></i></div>
+      <div>
+        <div class="modal-title" id="format-preview-title">Preview</div>
+        <div class="modal-subtitle" id="format-preview-subtitle"></div>
+      </div>
+      <button class="modal-close-btn" onclick="closeFormatPreview()" title="Close"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="modal-body" id="format-preview-body"></div>
+  </div>
+</div>
+
 
 <!-- ══════════════════════════════════════════════
      TAB 3 — PDF TO EXCEL
@@ -720,87 +874,26 @@
 <div id="tab-pdf" class="tab-section" style="display:none">
 <div class="page">
 
-  <div class="section-label">① Upload Files</div>
+  <div class="section-label">① Upload &amp; Settings</div>
 
-  <div class="upload-grid">
-
-    <!-- PDF Upload -->
-    <div class="card rose">
-      <div class="card-head">
-        <div class="card-title"><div class="card-icon"><i class="bi bi-file-earmark-pdf-fill"></i></div> PDF Files</div>
-      </div>
-      <div class="drop-zone" id="dz-pdf" onclick="document.getElementById('inp-pdf').click()">
-        <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
-        <p>Drag &amp; drop .pdf files here</p>
-        <span class="browse-btn">Browse files</span>
-      </div>
-      <input type="file" id="inp-pdf" multiple accept=".pdf" style="display:none"
-             onchange="pdfHandle(this.files); this.value=''">
-      <div class="file-list" id="fl-pdf"><div class="empty-note">No files uploaded</div></div>
-      <div class="naming-hint">
-        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Accepted files</strong>
-        Any exam PDF with numbered multiple-choice questions<br>
-        Supports single-column and two-column layouts
-      </div>
+  <div class="card rose" style="max-width:640px;margin:0 auto">
+    <div class="card-head">
+      <div class="card-title"><div class="card-icon"><i class="bi bi-file-earmark-pdf-fill"></i></div> PDF Files</div>
     </div>
-
-    <!-- AI Filter Settings -->
-    <div class="card amber">
-      <div class="card-head">
-        <div class="card-title"><div class="card-icon"><i class="bi bi-robot"></i></div> AI Filtering</div>
-        <span class="chip chip-gray">Optional</span>
-      </div>
-      <p style="font-size:.78rem;color:#64748b;line-height:1.5">
-        Uses <strong>Groq AI</strong> to remove non-question items
-        (page numbers, headers, table rows) that slipped through parsing.
-      </p>
-      <label class="toggle-row">
-        <input type="checkbox" id="pdf-ai-toggle" onchange="pdfToggleAI(this.checked)">
-        Enable AI filtering
-      </label>
-      <div class="api-key-wrap" id="pdf-api-wrap">
-        <label style="font-size:.74rem;color:#64748b;font-weight:500">Groq API Key</label>
-        <input type="password" class="api-key-input" id="pdf-api-key"
-               placeholder="gsk_…  (or set GROQ_API_KEY env var)">
-        <span style="font-size:.68rem;color:#94a3b8">
-          Get a free key at <strong>console.groq.com</strong>
-        </span>
-      </div>
-      <div class="naming-hint">
-        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Without AI</strong>
-        Regex-based parser handles most well-formatted PDFs accurately.
-        Enable AI only if you see leftover non-question rows in the output.
-      </div>
+    <div class="drop-zone" id="dz-pdf" onclick="document.getElementById('inp-pdf').click()">
+      <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
+      <p>Drag &amp; drop .pdf files here</p>
+      <span class="browse-btn">Browse files</span>
     </div>
-
-    <!-- Output Format -->
-    <div class="card sky">
-      <div class="card-head">
-        <div class="card-title"><div class="card-icon"><i class="bi bi-table"></i></div> Output Format</div>
-        <span class="chip chip-blue">Excel (.xlsx)</span>
-      </div>
-      <p style="font-size:.78rem;color:#64748b;margin-bottom:.35rem;line-height:1.5">
-        Each PDF produces one <code style="background:#e2e8f0;border-radius:3px;padding:.02rem .28rem;font-size:.7rem">.xlsx</code>
-        file with these columns:
-      </p>
-      <div class="col-list">
-        <div class="col-item">Question No.</div>
-        <div class="col-item">Question</div>
-        <div class="col-item">Choice1</div>
-        <div class="col-item">iscorrect1 (1/0)</div>
-        <div class="col-item">Choice2</div>
-        <div class="col-item">iscorrect2 (1/0)</div>
-        <div class="col-item">Choice_3</div>
-        <div class="col-item">iscorrect3 (1/0)</div>
-        <div class="col-item">Choice_4</div>
-        <div class="col-item">iscorrect4 (1/0)</div>
-        <div class="col-item">Rate/Points</div>
-        <div class="col-item">Content Standards</div>
-        <div class="col-item">TOPIC · SUBTOPIC · DOMAIN</div>
-      </div>
+    <input type="file" id="inp-pdf" multiple accept=".pdf" style="display:none"
+           onchange="pdfHandle(this.files); this.value=''">
+    <div class="file-list" id="fl-pdf"><div class="empty-note">No files uploaded</div></div>
+    <div class="naming-hint">
+      <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Per file, set:</strong>
+      Column layout (1 or 2 columns) — auto-detected, override if wrong<br>
+      Answer choices — how many choices (A–D, or up to A–Z) to always include in the Excel
     </div>
-
-  </div><!-- /upload-grid -->
+  </div>
 
   <div class="process-wrap">
     <button class="process-btn" id="pdf-process-btn" onclick="pdfProcess()" disabled>
@@ -811,12 +904,12 @@
 
   <div class="results-section hidden" id="pdf-results-section">
     <div class="results-header">
-      <div class="section-label" style="margin:0">② Download Results</div>
+      <div class="section-label" style="margin:0">② Preview &amp; Download</div>
       <a class="dl-all-btn" href="/pdf/download-all">
         <i class="bi bi-download"></i> Download All (.zip)
       </a>
     </div>
-    <div class="results-grid" id="pdf-results-grid"></div>
+    <div id="pdf-results-list"></div>
   </div>
 
   <div class="reset-wrap">
@@ -842,6 +935,18 @@ window.addEventListener('DOMContentLoaded', () => {
   const tab = serverTab !== 'scantron' ? serverTab : (localStorage.getItem('activeTab') || 'scantron');
   switchTab(tab);
   if (document.body.dataset.scroll === 'true') window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+// ── Click a preview row to select it — makes it easy to keep your place
+//    while scrolling a long table. One delegated listener covers every
+//    preview/Excel-style table on the page, including ones rendered later. ──
+document.addEventListener('click', (e) => {
+  const row = e.target.closest('.preview-table tbody tr, .xl-table tbody tr');
+  if (!row) return;
+  const tbody = row.parentElement;
+  const wasSelected = row.classList.contains('row-selected');
+  tbody.querySelectorAll('tr.row-selected').forEach(tr => tr.classList.remove('row-selected'));
+  if (!wasSelected) row.classList.add('row-selected');
 });
 
 // ── Shared drag & drop ─────────────────────────────────────────────────────
@@ -1019,10 +1124,10 @@ async function afProcess() {
 }
 function afShowResults(results) {
   const section = document.getElementById('af-results-section');
-  const grid    = document.getElementById('af-results-grid');
+  const list    = document.getElementById('af-results-list');
   section.classList.remove('hidden');
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  grid.innerHTML = results.map(r => {
+  list.innerHTML = results.map(r => {
     const isErr  = r.status === 'error';
     const hasW   = r.warnings?.length;
     const cls    = isErr ? 'error' : hasW ? 'warn' : '';
@@ -1032,13 +1137,22 @@ function afShowResults(results) {
       r.answers ? `<span class="badge green"><i class="bi bi-check-circle-fill"></i> Answers ✓</span>` : `<span class="badge amber">No Answers</span>`,
       isErr     ? `<span class="badge red">Error</span>`          : `<span class="badge green">Done ✓</span>`,
     ].join('');
-    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${w}</div>`).join('')}</div>` : '';
-    const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${r.error}</div>` : '';
+    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${pdfEscapeHtml(w)}</div>`).join('')}</div>` : '';
+    const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(r.error)}</div>` : '';
     const dl     = r.output ? `<a class="dl-btn" href="/autofill/download/${encodeURIComponent(r.output)}"><i class="bi bi-download"></i> Download</a>` : '';
-    return `<div class="result-card ${cls}">
-      <div class="result-name">${r.base}</div>
+
+    let tableHtml = '';
+    if (!isErr && r.columns?.length) {
+      const theadCells = r.columns.map(c => `<th>${pdfEscapeHtml(c)}</th>`).join('');
+      const bodyRows   = r.preview.map(row => `<tr>${row.map(v => `<td>${pdfEscapeHtml(v)}</td>`).join('')}</tr>`).join('');
+      tableHtml = `<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table"><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
+    }
+
+    return `<div class="preview-card ${cls}">
+      <div class="result-name">${pdfEscapeHtml(r.base)}</div>
       <div class="badge-row">${badges}</div>
       ${warns}${errMsg}
+      ${tableHtml}
       <div class="result-actions">${dl}</div>
     </div>`;
   }).join('');
@@ -1051,35 +1165,302 @@ async function afReset() {
   document.getElementById('af-results-section').classList.add('hidden');
 }
 
-// ── PDF to Excel ───────────────────────────────────────────────────────────
-const pdfFiles = [];
+// ── Required-format preview modal (exam template / tags / students) ────────
+const FORMAT_PREVIEWS = {
+  exam: {
+    icon: 'bi-file-earmark-spreadsheet',
+    colors: ['#3b82f6', '#60a5fa'],
+    title: 'Exam Template',
+    subtitle: 'What one question row should look like',
+    intro: 'Each row in <strong>_exam_template.xlsx</strong> is one question. Fill in the fields below — the shaded ones are optional and get auto-filled later from the Tags file.',
+    fields: [
+      { label: 'Question No.',      value: '1' },
+      { label: 'Question',          value: 'What is the largest organ in the human body?' },
+      { label: 'Choice1',           value: 'Liver' },
+      { label: 'iscorrect1 (1/0)',  value: '0' },
+      { label: 'Choice2',           value: 'Skin' },
+      { label: 'iscorrect2 (1/0)',  value: '1' },
+      { label: 'Choice_3',          value: 'Heart' },
+      { label: 'iscorrect3 (1/0)',  value: '0' },
+      { label: 'Choice_4',          value: 'Brain' },
+      { label: 'iscorrect4 (1/0)',  value: '0' },
+      { label: 'Rate/Points',       value: '1' },
+      { label: 'Content Standards', value: 'auto-filled from Tags', optional: true },
+      { label: 'Competency',        value: 'auto-filled from Tags', optional: true },
+      { label: 'TOPIC',             value: 'auto-filled from Tags', optional: true },
+      { label: 'SUBTOPIC',          value: 'auto-filled from Tags', optional: true },
+      { label: 'THINKING SKILLS',   value: 'auto-filled from Tags', optional: true },
+      { label: 'DOMAIN',            value: 'auto-filled from Tags', optional: true },
+      { label: 'RECOMMENDATIONS',   value: 'auto-filled from Tags', optional: true },
+    ],
+    note: 'File name must end with <code>_exam_template.xlsx</code>, e.g. <code>PHCHEM222-LEC_exam_template.xlsx</code>.',
+  },
+  tags: {
+    icon: 'bi-tags-fill',
+    colors: ['#8b5cf6', '#a78bfa'],
+    title: 'Tags',
+    subtitle: 'What one tag row should look like',
+    intro: 'Each row in <strong>_tags.xlsx</strong> maps a code to a range of question numbers. The last segment of the code (e.g. <code>-D1</code>, <code>-CO2</code>) tells the app which column to fill.',
+    fields: [
+      { label: 'code',    value: '26/27-Final-ANATOMY2-D1' },
+      { label: 'ItemNos', value: '1-20' },
+    ],
+    note: 'File name\'s base must match the exam template, e.g. <code>PHCHEM222-LEC_tags.xlsx</code>.',
+  },
+  students: {
+    icon: 'bi-people-fill',
+    colors: ['#0ea5e9', '#38bdf8'],
+    title: 'Students List',
+    subtitle: 'What one student row should look like',
+    intro: 'Each row in <strong>students.xlsx</strong> is one enrolled student.',
+    fields: [
+      { label: 'Student ID',   value: '4579-21' },
+      { label: 'Student Name', value: 'Limos, Domenic' },
+      { label: 'LAST NAME',    value: 'Limos' },
+      { label: 'FIRST NAME',   value: 'Domenic' },
+    ],
+    note: 'File must be named exactly <code>students.xlsx</code>.',
+  },
+  answer: {
+    icon: 'bi-check2-circle',
+    colors: ['#10b981', '#34d399'],
+    title: 'Co-Analysis',
+    subtitle: 'What one correct-answer row should look like',
+    intro: 'Each row in <strong>_co-analysis.xlsx</strong> gives the correct answer for a question (or range of questions). Column headers are ignored — only the <strong>position</strong> (1st column, 2nd column) matters.',
+    fields: [
+      { label: 'ItemNos (1st column)', value: '1' },
+      { label: 'Answer (2nd column)',  value: 'B' },
+    ],
+    note: 'File name\'s base must match the exam template, e.g. <code>PHCHEM222-LEC_co-analysis.xlsx</code>. ItemNos also accepts ranges like <code>1-20</code>, and Answer must be A, B, C, or D.',
+  },
+  questions: {
+    icon: 'bi-question-circle-fill',
+    colors: ['#10b981', '#34d399'],
+    title: 'Question Files',
+    subtitle: 'What one question row should look like',
+    intro: 'This is usually just the direct output of <strong>Convert Questionnaire</strong>, uploaded as-is. Only the <strong>Question</strong> column (it must be one of the first two columns) is actually read and matched to each scanned answer sheet, in order — the rest can stay in the file, they\'re just ignored here.',
+    fields: [
+      { label: 'Question',           value: 'What is the powerhouse of the cell?' },
+      { label: 'Choice1',            value: 'Nucleus' },
+      { label: 'iscorrect1 (1/0)',   value: '0', optional: true },
+      { label: 'Choice2',            value: 'Mitochondria' },
+      { label: 'iscorrect2 (1/0)',   value: '1', optional: true },
+      { label: 'Choice_3',           value: 'Ribosome' },
+      { label: 'iscorrect3 (1/0)',   value: '0', optional: true },
+      { label: 'Choice_4',           value: 'Golgi Body' },
+      { label: 'iscorrect4 (1/0)',   value: '0', optional: true },
+      { label: 'Rate/Points',        value: '1', optional: true },
+      { label: 'Content Standards',  value: '', optional: true },
+      { label: 'Competency',         value: '', optional: true },
+      { label: 'TOPIC',              value: '', optional: true },
+      { label: 'SUBTOPIC',           value: '', optional: true },
+      { label: 'THINKING SKILLS',    value: '', optional: true },
+      { label: 'DOMAIN',             value: '', optional: true },
+      { label: 'RECOMMENDATIONS',    value: '', optional: true },
+    ],
+    note: 'Have 5+ choices? Keep adding <code>Choice_5</code> / <code>iscorrect5 (1/0)</code>, <code>Choice_6</code> / <code>iscorrect6 (1/0)</code>, and so on after RECOMMENDATIONS. File must be named to match the answer folder name minus its last hyphen-segment, e.g. <code>PHCHEM222-LEC.xlsx</code>.',
+  },
+  answerfile: {
+    icon: 'bi-folder2-open',
+    colors: ['#8b5cf6', '#a78bfa'],
+    title: 'Answer Folders',
+    subtitle: 'What one scanned student file looks like',
+    intro: 'Each folder holds one <strong>.xlsx</strong> per student, exported directly by your scanning software — you don\'t build these by hand, just don\'t rename or reformat them. Two parts of the file are read by the app:',
+    sections: [
+      {
+        caption: 'Header block — a "NAME:" and "CODE:" row, found anywhere in the first few rows',
+        columns: ['Label', 'Value'],
+        rows: [['NAME:', 'Dela Cruz, Juan'], ['CODE:', '4579-21']],
+      },
+      {
+        caption: 'Answer table — the row where column A reads exactly "Responses"',
+        columns: ['Responses', 'Mark (col B)', '(col C)', '(col D)', '(col E)', 'Key (col F)'],
+        optionalCols: [2, 3, 4],
+        rows: [['1', 'A', '', '', '', '1A']],
+      },
+    ],
+    note: 'Column B is the student\'s marked answer and column F is the correct answer for that item (its last character is the letter). Columns C–E are ignored — only position matters, not their contents.',
+  },
+};
 
+function buildXlTable(columns, rows, optionalCols) {
+  optionalCols = optionalCols || [];
+  const colLetterCells = columns.map((_, i) => `<th class="xl-colletter">${xlColLetter(i + 1)}</th>`).join('');
+  const headerCells    = columns.map((c, i) => `<th class="${optionalCols.includes(i) ? 'optional' : ''}">${pdfEscapeHtml(c)}</th>`).join('');
+  const bodyRows = rows.map((row, r) => {
+    const cells = row.map((v, i) => `<td class="${optionalCols.includes(i) ? 'optional' : ''}">${pdfEscapeHtml(v)}</td>`).join('');
+    return `<tr><td class="xl-rownum">${r + 2}</td>${cells}</tr>`;
+  }).join('');
+  return `
+    <div class="xl-wrap">
+      <div class="xl-wrap-scroll">
+        <table class="xl-table">
+          <thead>
+            <tr class="xl-colletter-row"><th class="xl-corner"></th>${colLetterCells}</tr>
+            <tr class="xl-header-row"><th class="xl-rownum">1</th>${headerCells}</tr>
+          </thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function showFormatPreview(key) {
+  const spec = FORMAT_PREVIEWS[key];
+  if (!spec) return;
+
+  document.getElementById('format-preview-head').style.setProperty('--modal-accent', spec.colors[0]);
+  document.getElementById('format-preview-head').style.setProperty('--modal-accent2', spec.colors[1]);
+  document.getElementById('format-preview-icon').innerHTML = `<i class="bi ${spec.icon}"></i>`;
+  document.getElementById('format-preview-title').textContent = spec.title;
+  document.getElementById('format-preview-subtitle').textContent = spec.subtitle;
+
+  let tablesHtml;
+  if (spec.sections) {
+    tablesHtml = spec.sections.map((sec, idx) => `
+      <p style="font-size:.78rem;font-weight:600;color:#334155;margin:${idx === 0 ? '0' : '1.1rem'} 0 .5rem">${sec.caption}</p>
+      ${buildXlTable(sec.columns, sec.rows, sec.optionalCols)}`).join('');
+  } else {
+    const columns = spec.fields.map(f => f.label);
+    const optionalCols = spec.fields.reduce((acc, f, i) => { if (f.optional) acc.push(i); return acc; }, []);
+    tablesHtml = buildXlTable(columns, [spec.fields.map(f => f.value)], optionalCols);
+  }
+
+  const noteHtml = spec.note
+    ? `<div class="modal-note"><i class="bi bi-info-circle-fill"></i><span>${spec.note}</span></div>`
+    : '';
+
+  document.getElementById('format-preview-body').innerHTML =
+    `<p class="modal-intro">${spec.intro}</p>${tablesHtml}${noteHtml}`;
+
+  document.getElementById('format-preview-overlay').style.display = 'flex';
+}
+function xlColLetter(n) {
+  let s = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+function closeFormatPreview() {
+  document.getElementById('format-preview-overlay').style.display = 'none';
+}
+
+// ── Preview of already-converted output files (scantron results) ──────────
+// Shown inline in each result card, same as the Convert Questionnaire and
+// Prepare Exam Template tabs — no click needed, for a consistent feel.
+async function scLoadResultPreviews() {
+  const cards = document.querySelectorAll('#sc-results-list .preview-card[data-filename]');
+  for (const card of cards) {
+    const filename = card.dataset.filename;
+    const slot = card.querySelector('.sc-preview-slot');
+    try {
+      const data = await fetch(`/preview/${encodeURIComponent(filename)}`).then(r => r.json());
+      if (data.error) {
+        slot.innerHTML = `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(data.error)}</div>`;
+        continue;
+      }
+      // First two columns are the student's name and code, not a question —
+      // everything after that is "Item 1", "Item 2", ... in order. This row
+      // is preview-only, purely computed here — the downloaded file is untouched.
+      const itemNoCells = data.columns.map((_, i) => {
+        const itemNo = i - 2;
+        return `<th>${itemNo >= 0 ? itemNo + 1 : ''}</th>`;
+      }).join('');
+      const theadCells = data.columns.map(c => `<th>${pdfEscapeHtml(c)}</th>`).join('');
+      const bodyRows = data.preview.map(row => `<tr>${row.map(v => `<td>${pdfEscapeHtml(v)}</td>`).join('')}</tr>`).join('');
+      slot.innerHTML = `<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table"><thead><tr class="item-no-row">${itemNoCells}</tr><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
+    } catch (e) {
+      slot.innerHTML = `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> Unexpected error: ${pdfEscapeHtml(e.message)}</div>`;
+    }
+  }
+}
+scLoadResultPreviews();
+
+// ── PDF to Excel ─────────────────────────────────────────────────────────
+const pdfFiles = []; // { name, overall: 'single'|'double'|'mixed' }
+const pdfLayoutOverrides = {}; // name -> 'auto'|'single'|'double'
+const pdfChoiceCounts    = {}; // name -> 4..26  (min answer choices to include in the Excel)
+
+function pdfEscapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s ?? '';
+  return div.innerHTML;
+}
 function pdfSyncBtn() {
   document.getElementById('pdf-process-btn').disabled = pdfFiles.length === 0;
+}
+function pdfLayoutLabel(overall) {
+  if (overall === 'double') return '2-column';
+  if (overall === 'mixed')  return 'mixed columns';
+  return '1-column';
 }
 function pdfRenderList() {
   const el = document.getElementById('fl-pdf');
   if (!pdfFiles.length) { el.innerHTML = '<div class="empty-note">No files uploaded</div>'; return; }
-  el.innerHTML = '<div class="file-list">' + pdfFiles.map(name => `
-    <div class="file-item">
-      <div class="file-info"><div class="file-name" title="${name}"><i class="bi bi-file-earmark-pdf-fill"></i> ${name}</div></div>
-      <button class="icon-btn" onclick="pdfRemove('${name}')" title="Remove">✕</button>
-    </div>`).join('') + '</div>';
+  el.innerHTML = '<div class="file-list">' + pdfFiles.map(f => {
+    const badgeCls   = 'layout-badge' + (f.overall === 'mixed' ? ' mixed' : '');
+    const enc        = encodeURIComponent(f.name);
+    const curLayout  = pdfLayoutOverrides[f.name] || 'auto';
+    const curChoices = pdfChoiceCounts[f.name] || 4;
+
+    const layoutRow = `<div class="layout-row">
+      <span class="${badgeCls}">Detected: ${pdfLayoutLabel(f.overall)}</span>
+      <div class="radio-group">
+        <label><input type="radio" name="layout-${enc}" value="auto"   ${curLayout === 'auto'   ? 'checked' : ''} onchange="pdfSetLayout('${enc}','auto')"> Auto</label>
+        <label><input type="radio" name="layout-${enc}" value="single" ${curLayout === 'single' ? 'checked' : ''} onchange="pdfSetLayout('${enc}','single')"> 1 column</label>
+        <label><input type="radio" name="layout-${enc}" value="double" ${curLayout === 'double' ? 'checked' : ''} onchange="pdfSetLayout('${enc}','double')"> 2 column</label>
+      </div>
+    </div>`;
+
+    const choicesRow = `<div class="choices-row">
+      <span style="font-size:.68rem;color:#64748b">Answer choices:</span>
+      <select class="layout-select" onchange="pdfSetChoices('${enc}', this.value)">
+        ${Array.from({ length: 23 }, (_, i) => i + 4).map(n =>
+          `<option value="${n}" ${curChoices == n ? 'selected' : ''}>${n} (A–${String.fromCharCode(64 + n)})</option>`
+        ).join('')}
+      </select>
+    </div>`;
+
+    return `<div class="file-item stacked">
+      <div class="file-info"><div class="file-name" title="${f.name}"><i class="bi bi-file-earmark-pdf-fill"></i> ${f.name}</div></div>
+      <button class="icon-btn" onclick="pdfRemove('${enc}')" title="Remove">✕</button>
+      ${layoutRow}
+      ${choicesRow}
+    </div>`;
+  }).join('') + '</div>';
+}
+function pdfSetLayout(encodedName, value) {
+  pdfLayoutOverrides[decodeURIComponent(encodedName)] = value;
+}
+function pdfSetChoices(encodedName, value) {
+  pdfChoiceCounts[decodeURIComponent(encodedName)] = parseInt(value, 10);
 }
 async function pdfHandle(files) {
-  const valid = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  const valid = Array.from(files).filter(f => /\.pdf$/i.test(f.name));
   if (!valid.length) return;
   const fd = new FormData();
   valid.forEach(f => fd.append('files', f));
   const data = await fetch('/pdf/upload', { method: 'POST', body: fd }).then(r => r.json());
   if (!data.uploaded) return;
-  data.uploaded.forEach(n => { if (!pdfFiles.includes(n)) pdfFiles.push(n); });
+  data.uploaded.forEach(u => {
+    if (!pdfFiles.some(f => f.name === u.name)) {
+      pdfFiles.push({ name: u.name, overall: u.layout?.overall || 'single' });
+      pdfLayoutOverrides[u.name] = 'auto';
+      pdfChoiceCounts[u.name] = 4;
+    }
+  });
   pdfRenderList(); pdfSyncBtn();
 }
-async function pdfRemove(name) {
+async function pdfRemove(encodedName) {
+  const name = decodeURIComponent(encodedName);
   await fetch(`/pdf/remove/${encodeURIComponent(name)}`, { method: 'DELETE' });
-  const idx = pdfFiles.indexOf(name);
+  const idx = pdfFiles.findIndex(f => f.name === name);
   if (idx > -1) pdfFiles.splice(idx, 1);
+  delete pdfLayoutOverrides[name];
+  delete pdfChoiceCounts[name];
   pdfRenderList(); pdfSyncBtn();
 }
 
@@ -1090,21 +1471,17 @@ if (dzPdf) {
   dzPdf.addEventListener('drop', e => { e.preventDefault(); dzPdf.classList.remove('drag-over'); pdfHandle(e.dataTransfer.files); });
 }
 
-function pdfToggleAI(on) {
-  document.getElementById('pdf-api-wrap').classList.toggle('visible', on);
-}
-
 async function pdfProcess() {
   const btn   = document.getElementById('pdf-process-btn');
   const label = document.getElementById('pdf-btn-label');
-  btn.classList.add('loading'); btn.disabled = true; label.textContent = 'Converting…';
-  const use_ai  = document.getElementById('pdf-ai-toggle').checked;
-  const api_key = document.getElementById('pdf-api-key').value.trim();
+
+  btn.classList.add('loading'); btn.disabled = true;
+  label.textContent = 'Converting…';
   try {
     const data = await fetch('/pdf/process', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ use_ai, api_key }),
+      body: JSON.stringify({ layouts: pdfLayoutOverrides, min_choices: pdfChoiceCounts }),
     }).then(r => r.json());
     if (data.error) { alert('Error: ' + data.error); return; }
     pdfShowResults(data.results);
@@ -1118,34 +1495,44 @@ async function pdfProcess() {
 
 function pdfShowResults(results) {
   const section = document.getElementById('pdf-results-section');
-  const grid    = document.getElementById('pdf-results-grid');
+  const list    = document.getElementById('pdf-results-list');
   section.classList.remove('hidden');
   section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  grid.innerHTML = results.map(r => {
+  list.innerHTML = results.map(r => {
     const isErr  = r.status === 'error';
     const hasW   = r.warnings?.length;
     const cls    = isErr ? 'error' : hasW ? 'warn' : '';
     const badges = [
       `<span class="badge blue">${r.questions ?? 0} questions</span>`,
-      r.ai_filtered ? `<span class="badge purple"><i class="bi bi-robot"></i> AI filtered</span>` : '',
       isErr ? `<span class="badge red">Error</span>` : `<span class="badge green">Done ✓</span>`,
     ].join('');
-    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${w}</div>`).join('')}</div>` : '';
-    const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${r.error}</div>` : '';
+    const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${pdfEscapeHtml(w)}</div>`).join('')}</div>` : '';
+    const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(r.error)}</div>` : '';
     const dl     = r.output ? `<a class="dl-btn" href="/pdf/download/${encodeURIComponent(r.output)}"><i class="bi bi-download"></i> Download</a>` : '';
-    return `<div class="result-card ${cls}">
+
+    let tableHtml = '';
+    if (!isErr && r.columns?.length) {
+      const theadCells = r.columns.map(c => `<th>${pdfEscapeHtml(c)}</th>`).join('');
+      const bodyRows   = r.preview.map(row => `<tr>${row.map(v => `<td>${pdfEscapeHtml(v)}</td>`).join('')}</tr>`).join('');
+      tableHtml = `<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table"><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
+    }
+
+    return `<div class="preview-card ${cls}">
       <div class="result-name"><i class="bi bi-file-earmark-pdf-fill"></i> ${r.name}</div>
       <div class="badge-row">${badges}</div>
       ${warns}${errMsg}
+      ${tableHtml}
       <div class="result-actions">${dl}</div>
     </div>`;
   }).join('');
 }
 
 async function pdfReset() {
-  if (!confirm('Clear all uploaded PDFs and results?')) return;
+  if (!confirm('Clear all uploaded files and results?')) return;
   await fetch('/pdf/clear', { method: 'POST' });
   pdfFiles.length = 0;
+  Object.keys(pdfLayoutOverrides).forEach(k => delete pdfLayoutOverrides[k]);
+  Object.keys(pdfChoiceCounts).forEach(k => delete pdfChoiceCounts[k]);
   pdfRenderList(); pdfSyncBtn();
   document.getElementById('pdf-results-section').classList.add('hidden');
 }

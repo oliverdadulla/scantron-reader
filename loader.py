@@ -34,12 +34,12 @@ def load_main(path: str) -> Tuple[Optional[pd.DataFrame], pd.DataFrame, list]:
 
 def _autofill_question_nos(data_df: pd.DataFrame, sheet_names: list, path: str) -> pd.DataFrame:
     n = len(data_df)
-    q_labels = [f"Q{str(i + 1).zfill(3)}" for i in range(n)]
+    q_labels = [str(i + 1) for i in range(n)]
 
     if "Question No." not in data_df.columns:
         # Column missing entirely — insert it as the first column
         data_df.insert(0, "Question No.", q_labels)
-        print(f"   ℹ️  'Question No.' column not found — auto-filled Q001 to Q{str(n).zfill(3)}")
+        print(f"   ℹ️  'Question No.' column not found — auto-filled 1 to {n}")
         return data_df
 
     col = data_df["Question No."]
@@ -48,7 +48,7 @@ def _autofill_question_nos(data_df: pd.DataFrame, sheet_names: list, path: str) 
     if is_blank.all():
         # Column exists but every cell is empty — fill all rows
         data_df["Question No."] = q_labels
-        print(f"   ℹ️  'Question No.' was empty — auto-filled Q001 to Q{str(n).zfill(3)}")
+        print(f"   ℹ️  'Question No.' was empty — auto-filled 1 to {n}")
     elif is_blank.any():
         # Partially filled — fill only the blank cells
         data_df.loc[is_blank, "Question No."] = [

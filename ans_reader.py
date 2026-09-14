@@ -7,6 +7,56 @@ import sys
 import io
 import zipfile
 
+from config import COMPLETED_SUFFIX, CORRECT_ANSWER_SUFFIX, EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX
+
+# A Question File is usually just uploaded straight from an earlier stage's
+# output (e.g. the "_completed" file from Prepare Exam Template) rather than
+# renamed to bare "SUBJECTCODE-TYPE.xlsx" — strip those known suffixes so it
+# still matches its answer folder.
+_QUESTION_FILE_SUFFIXES = (COMPLETED_SUFFIX, EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX, CORRECT_ANSWER_SUFFIX)
+
+
+def _question_file_key(path: str) -> str:
+    key = '.'.join(os.path.basename(path).split(".")[:-1])
+    for suffix in _QUESTION_FILE_SUFFIXES:
+        if key.endswith(suffix):
+            return key[:-len(suffix)]
+    return key
+
+
+_CHOICE_COL_RE = re.compile(r"^Choice_?(\d+)$")
+
+
+def _question_choice_sets(questions_df_full):
+    """Per item, which choice letters (A, B, C, D, E, ...) actually have a
+    value in the question file — so a scanned answer using a letter the
+    question doesn't define (e.g. E on a 4-choice item) can be flagged."""
+    choice_cols = [
+        (col, int(m.group(1)))
+        for col in questions_df_full.columns
+        if (m := _CHOICE_COL_RE.match(col))
+    ]
+    sets = []
+    for _, row in questions_df_full.iterrows():
+        letters = set()
+        for col, n in choice_cols:
+            val = row[col]
+            if pd.notna(val) and str(val).strip():
+                letters.add(chr(64 + n))
+        sets.append(letters)
+    return sets
+
+
+def _find_column(df, name):
+    """Case/whitespace-insensitive column lookup — returns the real column
+    name as it appears in the file, or None if nothing matches."""
+    target = name.strip().lower()
+    for col in df.columns:
+        if str(col).strip().lower() == target:
+            return col
+    return None
+
+
 def nameCodeCheck(name, code): # blank_values = [None, "", "  ", np.nan]
     if (pd.isna(code) or ((isinstance(code, str) and code.strip() == ""))):
         return code
@@ -20,49 +70,6 @@ def isEmpty(value):
 
 def norm(s):
     return str(s).upper().replace('Ñ', 'N').replace('ñ', 'N')
-
-MA_PREFIXES       = {'MA.', 'MA', 'STO.', 'STA.', 'STO', 'STA'}
-TWO_PARTICLES     = {'DE LA', 'DE LOS', 'DE LAS'}
-ONE_PARTICLES     = {'DE', 'DEL', 'DOS', 'VDA.', 'DELA', 'DELOS', 'DELAS', 'SAN', 'SANTA', 'SANTO'}
-GEN_SUFFIXES      = {'JR.', 'JR', 'SR.', 'SR', 'II', 'III', 'IV', 'V', 'VI'}
-
-def extract_name_parts(fullname):
-    words = str(fullname).strip().split()
-    if not words:
-        return '', ''
-    # Strip trailing generation suffixes (JR., SR., III, etc.) and stray commas
-    while words and words[-1].upper().rstrip(',') in GEN_SUFFIXES:
-        words = words[:-1]
-    words = [w.rstrip(',') for w in words]
-    words = [w for w in words if w]
-    if not words:
-        return '', ''
-    # First name: keep "MA." / "STO." prefix together with the next word
-    if len(words) >= 2 and words[0].upper() in MA_PREFIXES:
-        first = (words[0] + ' ' + words[1]).upper()
-        rest = words[2:]
-    else:
-        first = words[0].upper()
-        rest = words[1:]
-    if not rest:
-        return first, ''
-    # Last name: scan backward absorbing surname particles.
-    # Two-word particles (DE LA, DE LOS) are detected by checking rest[i-1]+rest[i].
-    i = len(rest) - 1
-    last_parts = [rest[i].upper()]
-    i -= 1
-    while i >= 0:
-        w = rest[i].upper()
-        if i > 0 and (rest[i-1].upper() + ' ' + w) in TWO_PARTICLES:
-            last_parts.insert(0, w)
-            last_parts.insert(0, rest[i-1].upper())
-            i -= 2
-        elif w in ONE_PARTICLES:
-            last_parts.insert(0, w)
-            i -= 1
-        else:
-            break
-    return first, ' '.join(last_parts)
 
 def _patch_and_read_excel(filename):
     """Patch xlsx files where <v> holds a non-numeric value (e.g. 'A','B','C','D')
@@ -118,9 +125,23 @@ def run_processing(base_dir=None):
     except Exception as e:
         return [{'folder': '', 'status': 'error', 'message': f'Cannot load students.xlsx: {e}', 'output': ''}]
 
-    regcodes[["_FirstName", "_LastName"]] = regcodes["Fullname"].apply(
-        lambda x: pd.Series(extract_name_parts(x))
-    )
+    id_col = _find_column(regcodes, 'Student ID')
+    last_col = _find_column(regcodes, 'LAST NAME')
+    first_col = _find_column(regcodes, 'FIRST NAME')
+    missing = [n for n, c in [('Student ID', id_col), ('LAST NAME', last_col), ('FIRST NAME', first_col)] if c is None]
+    if missing:
+        return [{
+            'folder': '', 'status': 'error',
+            'message': (
+                f"students.xlsx is missing required column(s): {', '.join(missing)}. "
+                f"Found columns: {', '.join(str(c) for c in regcodes.columns)}"
+            ),
+            'output': '',
+        }]
+
+    regcodes["_StudentID"] = regcodes[id_col].astype(str).str.strip()
+    regcodes["_FirstName"] = regcodes[first_col].fillna('').astype(str).str.strip()
+    regcodes["_LastName"] = regcodes[last_col].fillna('').astype(str).str.strip()
     regcodes["_DisplayName"] = regcodes["_LastName"] + ", " + regcodes["_FirstName"]
     regcodes["_LastNameNorm"] = regcodes["_LastName"].apply(norm)
     regcodes["_FirstNameNorm"] = regcodes["_FirstName"].apply(norm)
@@ -130,14 +151,16 @@ def run_processing(base_dir=None):
 
     question_files = glob.glob(os.path.join(questions_folder, "*.xlsx"))
     questions_df = {}
+    choice_sets_df = {}
     for qf in question_files:
         try:
-            key = '.'.join(os.path.basename(qf).split(".")[:-1])
-            questions = pd.read_excel(qf, usecols=[0, 1], dtype=str)
+            key = _question_file_key(qf)
+            questions = pd.read_excel(qf, dtype=str)
             fmt = questions["Question"].to_list()
             fmt.insert(0, "Best Match")
             fmt.append("")
             questions_df[key] = fmt
+            choice_sets_df[key] = _question_choice_sets(questions)
         except Exception as e:
             exc_type, exc_obj, tb = sys.exc_info()
             results.append({'folder': qf, 'status': 'error',
@@ -150,6 +173,9 @@ def run_processing(base_dir=None):
             files = glob.glob(os.path.join(folder_path, "*.xlsx"))
             output = {}
             file_errors = []
+
+            qkey = '-'.join(folder_name.split("-")[:-1]) if if_section == 1 else '-'.join(folder_name.split("-")[:2])
+            item_choice_sets = choice_sets_df.get(qkey)
 
             for filename in files:
               try:
@@ -179,7 +205,7 @@ def run_processing(base_dir=None):
                 else:
                     studentcode = scantron_code_raw
 
-                matched = regcodes[regcodes["StudentNo"].str.strip() == studentcode] if studentcode else pd.DataFrame()
+                matched = regcodes[regcodes["_StudentID"] == studentcode] if studentcode else pd.DataFrame()
 
                 if len(matched) == 0:
                     name_parts = [i.strip() for i in scantron_name.split(',')]
@@ -208,7 +234,7 @@ def run_processing(base_dir=None):
                         pass
 
                 if len(matched) >= 1:
-                    studentcode = matched["StudentNo"].iloc[0]
+                    studentcode = matched["_StudentID"].iloc[0]
                     display_name = matched["_DisplayName"].iloc[0]
                 else:
                     raw_parts = [i.strip() for i in scantron_name.split(',')]
@@ -235,6 +261,16 @@ def run_processing(base_dir=None):
                         ca = str(correct_answers[i])
                         correct_letter = ca[1] if len(ca) >= 2 else ca
                         scores[i] = 'D' if correct_letter != 'D' else 'A'
+                    elif not isEmpty(scores[i]):
+                        raw = str(scores[i]).strip()
+                        if raw == '*':
+                            # scanning software's mark for "no answer / multiple marks detected"
+                            scores[i] = '* ⚠ (no answer / multiple marks)'
+                        elif item_choice_sets and i < len(item_choice_sets):
+                            letter = raw.upper()
+                            valid = item_choice_sets[i]
+                            if len(letter) == 1 and letter.isalpha() and valid and letter not in valid:
+                                scores[i] = f'{letter} ⚠ (not a choice on this item)'
 
                 scores.insert(0, studentcode)
                 output[display_name] = scores
@@ -242,10 +278,10 @@ def run_processing(base_dir=None):
                 file_errors.append(f'{os.path.basename(filename)}: {fe}')
 
             final_df = pd.DataFrame(output).T
+            final_df = final_df.sort_index()
             max_colno = final_df.shape[1]
             final_df.columns = list(range(max_colno))
 
-            qkey = '-'.join(folder_name.split("-")[:-1]) if if_section == 1 else '-'.join(folder_name.split("-")[:2])
             if qkey in questions_df:
                 questions_status = '— questions included'
                 question_headers = questions_df[qkey]

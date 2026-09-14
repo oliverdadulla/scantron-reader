@@ -5,8 +5,7 @@ import pandas as pd
 from pdf_config import COLUMN_ORDER, BLANK_COLUMNS
 
 
-def save_to_excel(questions: list[dict], pdf_path: Path, output_dir: Path) -> Path:
-    output_path = output_dir / (pdf_path.stem + ".xlsx")
+def build_dataframe(questions: list[dict]) -> pd.DataFrame:
     df = pd.DataFrame(questions)
     for col in BLANK_COLUMNS:
         df[col] = None
@@ -28,7 +27,10 @@ def save_to_excel(questions: list[dict], pdf_path: Path, output_dir: Path) -> Pa
 
     existing_ordered = [c for c in COLUMN_ORDER if c in df.columns]
     remaining = [c for c in df.columns if c not in COLUMN_ORDER and c not in extra_choice_flat]
-    df = df[existing_ordered + extra_choice_flat + remaining]
+    return df[existing_ordered + extra_choice_flat + remaining]
+
+
+def write_dataframe(df: pd.DataFrame, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="Questions")
@@ -39,4 +41,10 @@ def save_to_excel(questions: list[dict], pdf_path: Path, output_dir: Path) -> Pa
                 default=10,
             )
             ws.column_dimensions[col_cells[0].column_letter].width = min(max_len + 4, 60)
+
+
+def save_to_excel(questions: list[dict], pdf_path: Path, output_dir: Path) -> Path:
+    output_path = output_dir / (pdf_path.stem + ".xlsx")
+    df = build_dataframe(questions)
+    write_dataframe(df, output_path)
     return output_path
