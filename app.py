@@ -1,6 +1,7 @@
 import glob
 import io
 import os
+import re
 from dotenv import load_dotenv
 load_dotenv()
 import shutil
@@ -38,6 +39,38 @@ from merger import apply_lookup, build_lookup
 from writer import write_output, prepare_filled_df
 
 ALL_SUFFIXES = (EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX, CORRECT_ANSWER_SUFFIX)
+
+
+def _coerce_cell(value):
+    """Edited preview cells arrive as plain strings — turn ones that read as
+    a whole number or decimal back into real numbers, so re-saved files store
+    them as numbers rather than number-shaped text."""
+    if value is None:
+        return value
+    s = str(value).strip()
+    if s == '':
+        return None
+    try:
+        if re.fullmatch(r'-?\d+', s):
+            return int(s)
+        return float(s)
+    except ValueError:
+        return value
+
+
+def _grid_to_dataframe(payload):
+    """Build a DataFrame from a {'columns': [...], 'rows': [[...], ...]} preview
+    edit payload, or raise ValueError if it's malformed."""
+    import pandas as pd
+    columns = payload.get('columns')
+    rows = payload.get('rows')
+    if not columns or not isinstance(columns, list) or rows is None or not isinstance(rows, list):
+        raise ValueError('Expected {"columns": [...], "rows": [[...], ...]}.')
+    coerced_rows = [[_coerce_cell(v) for v in row] for row in rows]
+    # dtype=object keeps each cell's own type (int, float, str, None) — without
+    # it, pandas upcasts a column to float64 the moment it sees a blank/None
+    # next to a whole number, turning an edited "5" back into "5.0".
+    return pd.DataFrame(coerced_rows, columns=columns, dtype=object)
 
 
 # ── Scantron Reader helpers ───────────────────────────────────────────────────
@@ -222,14 +255,31 @@ def preview_output(filename):
     if not os.path.isfile(fp):
         return jsonify({'error': 'File not found.'}), 404
     try:
-        df = pd.read_excel(fp, engine='openpyxl').fillna('')
+        # dtype=str avoids pandas silently upcasting a numeric column with
+        # blanks to float64 (which would redisplay an edited "5" as "5.0").
+        df = pd.read_excel(fp, engine='openpyxl', dtype=str).fillna('')
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     return jsonify({
         'columns': [str(c) for c in df.columns],
-        'preview': df.astype(str).values.tolist(),
+        'preview': df.values.tolist(),
         'total': len(df),
     })
+
+
+@app.route('/update/<filename>', methods=['POST'])
+def update_output(filename):
+    fp = os.path.join(CONVERTED_DIR, Path(filename).name)
+    if not os.path.isfile(fp):
+        return jsonify({'error': 'File not found.'}), 404
+    try:
+        df = _grid_to_dataframe(request.get_json(silent=True) or {})
+        df.to_excel(fp, index=False)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    return jsonify({'ok': True})
 
 
 @app.route('/clear', methods=['POST'])
@@ -342,6 +392,29 @@ def autofill_download(filename):
         str(path), as_attachment=True, download_name=path.name,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
+
+
+@app.route('/autofill/update/<filename>', methods=['POST'])
+def autofill_update(filename):
+    import pandas as pd
+    path = get_autofill_session_dir() / 'output' / Path(filename).name
+    if not path.exists():
+        return jsonify({'error': 'File not found.'}), 404
+    try:
+        edited_df = _grid_to_dataframe(request.get_json(silent=True) or {})
+        xl = pd.ExcelFile(path, engine='openpyxl')
+        sheet_names = xl.sheet_names
+        with pd.ExcelWriter(path, engine='openpyxl') as writer:
+            if len(sheet_names) > 1:
+                xl.parse(sheet_name=0).to_excel(writer, sheet_name=sheet_names[0], index=False)
+                edited_df.to_excel(writer, sheet_name=sheet_names[1], index=False)
+            else:
+                edited_df.to_excel(writer, sheet_name=sheet_names[0], index=False)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    return jsonify({'ok': True})
 
 
 @app.route('/autofill/download-all')
@@ -468,7 +541,7 @@ def pdf_process():
                 results.append(item)
                 continue
 
-            n_choices = int(min_choices.get(pdf_path.name) or 4)
+            n_choices = int(min_choices.get(pdf_path.name) or 5)
             questions = _pad_choices(questions, n_choices)
 
             df = pdf_build_dataframe(questions)
@@ -496,6 +569,21 @@ def pdf_download(filename):
         return 'File not found', 404
     return send_file(str(path), as_attachment=True, download_name=path.name,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@app.route('/pdf/update/<filename>', methods=['POST'])
+def pdf_update(filename):
+    path = get_pdf_session_dir() / 'output' / Path(filename).name
+    if not path.exists():
+        return jsonify({'error': 'File not found.'}), 404
+    try:
+        df = _grid_to_dataframe(request.get_json(silent=True) or {})
+        pdf_write_dataframe(df, path)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    return jsonify({'ok': True})
 
 
 @app.route('/pdf/download-all')

@@ -2,13 +2,17 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-QUESTION_START_RE = re.compile(r"(?:^|\n)[ \t]*(\d+)\.[ \t]", re.MULTILINE)
+# "5. Question" and "5.Question" (no space after the number) must both count
+# as the start of question 5 — but the char right after the "." still has to
+# be a space/tab or a letter, never a digit, so "3.14" or "Fig. 2.1" don't
+# get misread as a new question.
+QUESTION_START_RE = re.compile(r"(?:^|\n)[ \t]*(\d+)\.(?=[ \t]|[A-Za-z])", re.MULTILINE)
 QUESTION_NUMBER_RE = re.compile(r"^\s*(\d+)\.\s*(.+)", re.DOTALL)
 CHOICE_RE = re.compile(
-    r"\b([A-Za-z])[.)]\s*(.*?)(?=\s+[A-Za-z][.)]\s|\Z)",
+    r"\b([A-Za-z])[.)]\s*(.*?)(?=\s+[A-Za-z][.)]\s*|\Z)",
     re.DOTALL,
 )
-FIRST_CHOICE_RE = re.compile(r"\b[Aa][.)]\s", re.IGNORECASE)
+FIRST_CHOICE_RE = re.compile(r"\b[Aa][.)]", re.IGNORECASE)
 
 _CHOICE_COL_MAP = {"A": "Choice1", "B": "Choice2", "C": "Choice_3", "D": "Choice_4"}
 
@@ -20,8 +24,8 @@ def _choice_col_name(letter: str) -> str:
     return f"Choice_{n}"
 
 
-HEADER_STRIP_RE = re.compile(r"^.*?(?=\n[ \t]*1\.[ \t])", re.DOTALL)
-_STARTS_WITH_Q = re.compile(r"^\s*\d+\.\s")
+HEADER_STRIP_RE = re.compile(r"^.*?(?=\n[ \t]*1\.(?:[ \t]|[A-Za-z]))", re.DOTALL)
+_STARTS_WITH_Q = re.compile(r"^\s*\d+\.(?:\s|[A-Za-z])")
 
 # ── Structural junk detectors (no hardcoded vocabulary) ──────────────────────
 

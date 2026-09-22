@@ -368,14 +368,55 @@
       border: 1px solid #e2e8f0; border-radius: 8px; margin: .6rem 0;
     }
     .preview-table-scroll { overflow-y: auto; max-height: 460px; }
-    .preview-table { border-collapse: collapse; width: 100%; font-size: .72rem; }
+    /* table-layout:fixed + a <colgroup> lets each column hold a precise,
+       independently draggable width (see .col-resize-handle) instead of
+       auto-sizing to content — narrow by default for short answers, widen
+       whichever column needs it, Excel-style. */
+    .preview-table { border-collapse: collapse; width: auto; font-size: .72rem; table-layout: fixed; }
     .preview-table th, .preview-table td {
       padding: .35rem .55rem; border-bottom: 1px solid #f1f5f9; text-align: left;
-      white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      /* Table cells default to min-width driven by their own (unwrappable)
+         content — without this, a long question used as a header can force
+         the column wider than its declared <col> width, even under
+         table-layout:fixed. This is what makes the narrow width stick. */
+      min-width: 0;
     }
     .preview-table thead { position: sticky; top: 0; z-index: 1; }
-    .preview-table th { background: #f8fafc; color: #475569; font-weight: 600; }
+    .preview-table th { background: #f8fafc; color: #475569; font-weight: 600; padding: 0; position: relative; }
+    .preview-table th .th-inner {
+      padding: .35rem .55rem; display: block; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      /* Leave room for .col-resize-handle and never overlap it — a
+         contenteditable region wins hit-testing over an absolutely
+         positioned sibling regardless of z-index, so without this gap
+         clicks/drags on the handle land on the text instead. */
+      width: calc(100% - 7px);
+    }
     .preview-table tbody tr:last-child td { border-bottom: none; }
+    .col-resize-handle {
+      position: absolute; top: 0; right: 0; bottom: 0; width: 6px;
+      cursor: col-resize; user-select: none; z-index: 3;
+    }
+    .col-resize-handle:hover, .col-resize-handle.is-resizing { background: rgba(59,130,246,.4); }
+
+    /* ── Per-preview zoom — scales the whole table (text, padding, columns) ── */
+    .zoom-controls {
+      display: flex; align-items: center; gap: .3rem;
+      margin: .5rem 0 -.15rem; justify-content: flex-end;
+    }
+    .zoom-btn {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px;
+      width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: .8rem; color: #475569; padding: 0; line-height: 1;
+    }
+    .zoom-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+    .zoom-level {
+      min-width: 38px; text-align: center; font-size: .68rem; color: #64748b;
+      cursor: pointer; user-select: none;
+    }
+    .zoom-level:hover { color: #334155; text-decoration: underline; }
+
     .preview-table .item-no-row th {
       font-size: .64rem; font-weight: 500; color: #94a3b8;
       text-align: center; padding: .2rem .55rem; background: #fcfcfd;
@@ -385,6 +426,54 @@
     .preview-table tbody tr { cursor: pointer; }
     .preview-table tbody tr:hover td { background: #eff6ff; }
     .preview-table tbody tr.row-selected td { background: #bfdbfe; }
+    /* Flagged cells (out-of-range or blank scanned answers) — red, and wins
+       over hover/selected so a problem never gets visually buried. */
+    .preview-table tbody tr td.cell-flagged {
+      background: #fef2f2; color: #b91c1c; font-weight: 600;
+      box-shadow: inset 0 0 0 1.5px #fca5a5;
+    }
+    /* A blank required cell renders as an empty element — show a visible
+       placeholder so it doesn't just look like an oddly-tinted empty box.
+       ::before content is display-only and never part of textContent, so it
+       can't leak into what gets saved. */
+    .preview-table tbody tr td.cell-flagged:empty::before {
+      content: "⚠ blank"; font-style: italic; font-weight: 500;
+    }
+    @keyframes flaggedPulse {
+      0%, 100% { box-shadow: inset 0 0 0 1.5px #fca5a5; }
+      50% { box-shadow: inset 0 0 0 3px #dc2626, 0 0 0 3px rgba(220,38,38,.35); }
+    }
+    .preview-table tbody tr td.cell-flagged.flagged-pulse { animation: flaggedPulse .6s ease-in-out 2; }
+    /* Summary badge — click cycles through every flagged cell in this card. */
+    .flagged-badge {
+      cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: .3rem;
+    }
+    .flagged-badge:hover { background: #fee2e2; }
+
+    /* ── Editable preview cells — click in and type; Save/Download push it
+       back into the actual file. ── */
+    .preview-table td[contenteditable="true"],
+    .preview-table .th-inner[contenteditable="true"] { cursor: text; }
+    .preview-table td[contenteditable="true"]:hover,
+    .preview-table .th-inner[contenteditable="true"]:hover { box-shadow: inset 0 0 0 1px #93c5fd; }
+    .preview-table td[contenteditable="true"]:focus,
+    .preview-table .th-inner[contenteditable="true"]:focus {
+      box-shadow: inset 0 0 0 2px #3b82f6; outline: none; background: #fff;
+    }
+    .dirty-badge { display: none; }
+    .dirty-badge.show { display: inline-flex; }
+    .save-btn {
+      flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: .35rem;
+      background: #f8fafc; color: #64748b; border: 1.5px solid #e2e8f0; border-radius: 7px;
+      padding: .45rem .8rem; font-size: .78rem; font-weight: 500;
+      cursor: pointer; font-family: inherit; transition: background .15s, border-color .15s, color .15s;
+    }
+    .save-btn:hover { background: #f1f5f9; }
+    .save-btn.is-dirty {
+      background: #fffbeb; border-color: #fcd34d; color: #b45309;
+    }
+    .save-btn.is-dirty:hover { background: #fef3c7; }
+    .save-btn:disabled { opacity: .6; cursor: not-allowed; }
 
     /* ── Clickable "preview required format" link ── */
     .preview-link {
@@ -716,11 +805,15 @@
     </div>
     <div id="sc-results-list">
       {% for f in output_files %}
-      <div class="preview-card" data-filename="{{ f }}">
+      <div class="preview-card" data-preview-type="scantron" data-filename="{{ f }}" data-dirty="false">
         <div class="result-name"><i class="bi bi-file-earmark-spreadsheet"></i> {{ f }}</div>
         <div class="sc-preview-slot"><div class="empty-note">Loading preview…</div></div>
         <div class="result-actions">
-          <a href="/download/{{ f }}" class="dl-btn">
+          <span class="badge amber dirty-badge"><i class="bi bi-circle-fill" style="font-size:.5rem"></i> Unsaved edits</span>
+          <button type="button" class="save-btn" onclick="saveCardEdits(this.closest('[data-preview-type]'))">
+            <i class="bi bi-check2"></i> Save
+          </button>
+          <a href="/download/{{ f }}" class="dl-btn" onclick="return downloadPreviewCard(event, this)">
             <i class="bi bi-download"></i> Download
           </a>
           <form action="/delete/output/{{ f }}" method="post" style="margin:0">
@@ -839,7 +932,7 @@
   <div class="results-section hidden" id="af-results-section">
     <div class="results-header">
       <div class="section-label" style="margin:0">② Preview &amp; Download</div>
-      <a class="dl-all-btn" href="/autofill/download-all">
+      <a class="dl-all-btn" href="/autofill/download-all" onclick="downloadAllWithEdits(event, this, 'af-results-list')">
         <i class="bi bi-download"></i> Download All (.zip)
       </a>
     </div>
@@ -905,7 +998,7 @@
   <div class="results-section hidden" id="pdf-results-section">
     <div class="results-header">
       <div class="section-label" style="margin:0">② Preview &amp; Download</div>
-      <a class="dl-all-btn" href="/pdf/download-all">
+      <a class="dl-all-btn" href="/pdf/download-all" onclick="downloadAllWithEdits(event, this, 'pdf-results-list')">
         <i class="bi bi-download"></i> Download All (.zip)
       </a>
     </div>
@@ -947,6 +1040,327 @@ document.addEventListener('click', (e) => {
   const wasSelected = row.classList.contains('row-selected');
   tbody.querySelectorAll('tr.row-selected').forEach(tr => tr.classList.remove('row-selected'));
   if (!wasSelected) row.classList.add('row-selected');
+});
+
+// ── Editable result previews — edit a cell, then Save or Download pushes
+//    the change into the actual file on disk. Only result previews (which
+//    have a real backing file) are made editable; the static "required
+//    format" sample modals (.xl-table) are illustrative only and stay as-is. ──
+const PREVIEW_SAVE_URL = {
+  pdf:      name => `/pdf/update/${encodeURIComponent(name)}`,
+  autofill: name => `/autofill/update/${encodeURIComponent(name)}`,
+  scantron: name => `/update/${encodeURIComponent(name)}`,
+};
+
+// Convert Questionnaire / Prepare Exam Template: a blank Question or base
+// choice almost always means the source file failed to parse or was never
+// filled in for that item — worth flagging the same as a scantron problem.
+// The dynamically-added Choice_5+ columns are excluded on purpose: those
+// are commonly blank simply because that particular question has fewer
+// choices, not because anything went wrong.
+const PREVIEW_REQUIRED_COLUMNS = new Set(['Question', 'Choice1', 'Choice2', 'Choice_3', 'Choice_4']);
+
+function previewCellIsFlagged(v, columnName) {
+  // Scanned-answer problems (out-of-range letter, blank "*") carry a "⚠"
+  // marker written directly into the cell text.
+  if (typeof v === 'string' && v.includes('⚠')) return true;
+  // A required column left blank is also a problem, even though nothing is
+  // written into the cell for it — the highlight is preview-only here.
+  if (columnName && PREVIEW_REQUIRED_COLUMNS.has(columnName)) {
+    return v === null || v === undefined || String(v).trim() === '';
+  }
+  return false;
+}
+
+function previewCellFlagTitle(v, columnName) {
+  if (typeof v === 'string' && v.includes('⚠')) return '';
+  if (columnName && PREVIEW_REQUIRED_COLUMNS.has(columnName)) {
+    return `Blank ${columnName} — check the source file, this usually means it didn't come through correctly`;
+  }
+  return '';
+}
+
+function previewFlaggedCount(columns, rows) {
+  let n = 0;
+  rows.forEach(row => row.forEach((v, i) => { if (previewCellIsFlagged(v, columns[i])) n++; }));
+  return n;
+}
+
+function previewFlaggedBadge(columns, rows) {
+  // A clickable summary badge — without it, a flagged cell buried in row 80
+  // of 100 is easy to scroll straight past. Click cycles through every
+  // flagged cell in this card, scrolling each into view in turn.
+  const count = previewFlaggedCount(columns, rows);
+  if (!count) return '';
+  return `<button type="button" class="badge red flagged-badge" data-flag-index="0" onclick="jumpToFlaggedCell(this)">
+    <i class="bi bi-exclamation-triangle-fill"></i> <span class="flag-jump-label">${count} flagged — click to review</span>
+  </button>`;
+}
+
+function jumpToFlaggedCell(btn) {
+  const card = btn.closest('.preview-card');
+  const cells = card ? card.querySelectorAll('.preview-table td.cell-flagged') : [];
+  if (!cells.length) return;
+  cells.forEach(c => c.classList.remove('flagged-pulse')); // only one cell pulses at a time
+  const idx = Number(btn.dataset.flagIndex || 0) % cells.length;
+  const cell = cells[idx];
+  cell.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  void cell.offsetWidth; // force reflow so the animation restarts even if this cell just pulsed
+  cell.classList.add('flagged-pulse');
+  btn.dataset.flagIndex = (idx + 1) % cells.length;
+  btn.querySelector('.flag-jump-label').textContent = `${cells.length} flagged — ${idx + 1} of ${cells.length}`;
+}
+
+function previewEditableCells(columns, rows, colWidthFn) {
+  // Shared cell markup for every editable preview table: header + body cells
+  // carry contenteditable so typing directly edits them in place. Each
+  // column gets its own <col> width (via colWidthFn, default a narrow 90px —
+  // just enough for a Question/Choice1-4 header — that a drag handle can
+  // resize, or a double-click on the handle auto-fits to content, both
+  // Excel-style).
+  //
+  // table-layout:fixed only actually constrains a column to its <col> width
+  // when the <table> itself has an explicit total width — with width:auto,
+  // browsers let a long unbreakable header (e.g. a full question used as a
+  // column name) force that column wider regardless of the <col> width. So
+  // the caller must set <table style="width:${totalWidth}px">.
+  const widthFor = colWidthFn || (() => 90);
+  const widths = columns.map((_, i) => widthFor(i, columns[i]));
+  const totalWidth = widths.reduce((a, b) => a + b, 0);
+  const colgroup = widths.map(w => `<col style="width:${w}px">`).join('');
+  const theadCells = columns.map((c, i) => `<th>
+      <div class="th-inner" contenteditable="true">${pdfEscapeHtml(c)}</div>
+      <div class="col-resize-handle" data-col-index="${i}" title="Drag to resize, double-click to fit"></div>
+    </th>`).join('');
+  const bodyRows = rows.map(row =>
+    `<tr>${row.map((v, i) => {
+      const flagged = previewCellIsFlagged(v, columns[i]);
+      const title = flagged ? ` title="${pdfEscapeHtml(previewCellFlagTitle(v, columns[i]))}"` : '';
+      return `<td contenteditable="true" class="${flagged ? 'cell-flagged' : ''}"${title}>${pdfEscapeHtml(v)}</td>`;
+    }).join('')}</tr>`
+  ).join('');
+  return { colgroup, theadCells, bodyRows, totalWidth };
+}
+
+function scItemColWidth(i) {
+  // Convert Student Answer: name + code columns need room for text; every
+  // item column after that only needs to fit "A"/"B"/"C"/"D" by default.
+  if (i === 0) return 150;
+  if (i === 1) return 90;
+  return 48;
+}
+
+const PREVIEW_ZOOM_MIN = 50, PREVIEW_ZOOM_MAX = 200, PREVIEW_ZOOM_STEP = 10;
+
+function previewZoomControls() {
+  // Shared zoom toolbar, placed just above a preview table. Scales the
+  // whole table (text, padding, and the pixel column widths together) via
+  // CSS zoom, so scrolling and column resizing both keep working correctly.
+  return `<div class="zoom-controls">
+    <button type="button" class="zoom-btn" onclick="adjustPreviewZoom(this, -${PREVIEW_ZOOM_STEP})" title="Zoom out"><i class="bi bi-dash-lg"></i></button>
+    <span class="zoom-level" onclick="resetPreviewZoom(this)" title="Reset to 100%">100%</span>
+    <button type="button" class="zoom-btn" onclick="adjustPreviewZoom(this, ${PREVIEW_ZOOM_STEP})" title="Zoom in"><i class="bi bi-plus-lg"></i></button>
+  </div>`;
+}
+
+function applyPreviewZoom(card, pct) {
+  pct = Math.min(PREVIEW_ZOOM_MAX, Math.max(PREVIEW_ZOOM_MIN, pct));
+  const wrap = card.querySelector('.preview-table-wrap');
+  if (wrap) wrap.style.zoom = pct / 100;
+  const label = card.querySelector('.zoom-level');
+  if (label) label.textContent = pct + '%';
+}
+function adjustPreviewZoom(btn, delta) {
+  const card = btn.closest('.preview-card');
+  if (!card) return;
+  const label = card.querySelector('.zoom-level');
+  const current = label ? parseInt(label.textContent, 10) || 100 : 100;
+  applyPreviewZoom(card, current + delta);
+}
+function resetPreviewZoom(el) {
+  const card = el.closest('.preview-card');
+  if (card) applyPreviewZoom(card, 100);
+}
+
+function syncPreviewTableWidth(table) {
+  // table-layout:fixed only holds a column to its declared width when the
+  // <table> itself has an explicit total width (width:auto lets browsers
+  // expand a column to fit long unbreakable content instead). So every time
+  // a column's width changes, resync the table's own width to match the sum.
+  const cols = table.querySelectorAll(':scope > colgroup > col');
+  let total = 0;
+  cols.forEach(c => { total += parseFloat(c.style.width) || 0; });
+  table.style.width = total + 'px';
+}
+
+document.addEventListener('mousedown', (e) => {
+  const handle = e.target.closest('.col-resize-handle');
+  if (!handle) return;
+  e.preventDefault();
+  const table = handle.closest('table');
+  const wrap = handle.closest('.preview-table-wrap');
+  const col = table?.querySelectorAll(':scope > colgroup > col')[Number(handle.dataset.colIndex)];
+  if (!col) return;
+
+  // CSS zoom scales mouse coordinates but not the *declared* col width, so
+  // convert the drag distance back to un-zoomed px before adding it — 10px
+  // of real mouse movement should always be 10px of logical column growth,
+  // whatever the current zoom level.
+  const zoom = wrap && wrap.style.zoom ? parseFloat(wrap.style.zoom) : 1;
+  const startX = e.clientX;
+  const startWidth = parseFloat(col.style.width) || col.getBoundingClientRect().width;
+  handle.classList.add('is-resizing');
+  document.body.style.cursor = 'col-resize';
+
+  function onMove(ev) {
+    const delta = (ev.clientX - startX) / (zoom || 1);
+    col.style.width = Math.max(28, startWidth + delta) + 'px';
+    syncPreviewTableWidth(table);
+  }
+  function onUp() {
+    handle.classList.remove('is-resizing');
+    document.body.style.cursor = '';
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+});
+
+// Double-click a column's resize handle to auto-fit it to its content —
+// same gesture as double-clicking a column border in Excel/Sheets.
+document.addEventListener('dblclick', (e) => {
+  const handle = e.target.closest('.col-resize-handle');
+  if (!handle) return;
+  e.preventDefault();
+  const table = handle.closest('table');
+  const colIndex = Number(handle.dataset.colIndex);
+  const col = table?.querySelectorAll(':scope > colgroup > col')[colIndex];
+  if (!col) return;
+  autoFitPreviewColumn(table, col, colIndex);
+});
+
+function measurePreviewTextWidth(text, font) {
+  const canvas = measurePreviewTextWidth._canvas || (measurePreviewTextWidth._canvas = document.createElement('canvas'));
+  const ctx = canvas.getContext('2d');
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
+
+function autoFitPreviewColumn(table, col, colIndex) {
+  const sample = table.querySelector('tbody td') || table.querySelector('.th-inner');
+  const font = sample ? getComputedStyle(sample).font : '12px sans-serif';
+
+  const headRows = table.querySelectorAll('thead tr');
+  const headerCell = headRows[headRows.length - 1]?.children[colIndex];
+  let maxWidth = headerCell ? measurePreviewTextWidth(headerCell.textContent.trim(), font) : 0;
+
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    const cell = tr.children[colIndex];
+    if (cell) maxWidth = Math.max(maxWidth, measurePreviewTextWidth(cell.textContent.trim(), font));
+  });
+
+  const cellPadding = 24; // matches the cell's own left+right padding, plus a little breathing room
+  col.style.width = Math.min(520, Math.max(32, Math.ceil(maxWidth) + cellPadding)) + 'px';
+  syncPreviewTableWidth(table);
+}
+
+function previewResultActions(previewType, filename, downloadUrl) {
+  // Shared Save + Download markup, wired to the right per-tab save endpoint.
+  const enc = encodeURIComponent(filename);
+  return `
+    <span class="badge amber dirty-badge"><i class="bi bi-circle-fill" style="font-size:.5rem"></i> Unsaved edits</span>
+    <button type="button" class="save-btn" onclick="saveCardEdits(this.closest('[data-preview-type]'))">
+      <i class="bi bi-check2"></i> Save
+    </button>
+    <a class="dl-btn" href="${downloadUrl}" onclick="return downloadPreviewCard(event, this)">
+      <i class="bi bi-download"></i> Download
+    </a>`;
+}
+
+function readTableGrid(card) {
+  const table = card.querySelector('.preview-table');
+  if (!table) return null;
+  const headRows = table.querySelectorAll('thead tr');
+  const headRow = headRows[headRows.length - 1]; // last row = real headers (skips a computed row like item numbers)
+  const columns = Array.from(headRow.children).map(c => c.textContent.trim());
+  const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr =>
+    Array.from(tr.children).map(td => td.textContent.trim())
+  );
+  return { columns, rows };
+}
+
+function setCardDirty(card, dirty) {
+  card.dataset.dirty = dirty ? 'true' : 'false';
+  const badge = card.querySelector('.dirty-badge');
+  if (badge) badge.classList.toggle('show', dirty);
+  const saveBtn = card.querySelector('.save-btn');
+  if (saveBtn) saveBtn.classList.toggle('is-dirty', dirty);
+}
+
+async function saveCardEdits(card) {
+  if (!card) return true;
+  const type = card.dataset.previewType;
+  const filename = card.dataset.filename;
+  const urlFn = PREVIEW_SAVE_URL[type];
+  const grid = urlFn ? readTableGrid(card) : null;
+  if (!urlFn || !filename || !grid) return true; // nothing editable here — treat as success
+
+  const saveBtn = card.querySelector('.save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving…'; }
+  try {
+    const resp = await fetch(urlFn(filename), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(grid),
+    }).then(r => r.json());
+    if (resp.error) { alert('Could not save changes: ' + resp.error); return false; }
+    setCardDirty(card, false);
+    return true;
+  } catch (e) {
+    alert('Could not save changes: ' + e.message);
+    return false;
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="bi bi-check2"></i> Save'; }
+  }
+}
+
+async function downloadPreviewCard(event, link) {
+  const card = link.closest('[data-preview-type]');
+  if (card && card.dataset.dirty === 'true') {
+    event.preventDefault();
+    const ok = await saveCardEdits(card);
+    if (ok) window.location.href = link.href;
+  }
+  // not dirty — let the click proceed as a normal download link
+}
+
+async function downloadAllWithEdits(event, link, containerId) {
+  const container = document.getElementById(containerId);
+  const dirtyCards = container ? container.querySelectorAll('[data-preview-type][data-dirty="true"]') : [];
+  if (!dirtyCards.length) return; // nothing pending — let the click proceed normally
+  event.preventDefault();
+  for (const card of dirtyCards) {
+    const ok = await saveCardEdits(card);
+    if (!ok) return; // stop — don't zip up a stale/partial save
+  }
+  window.location.href = link.href;
+}
+
+document.addEventListener('input', (e) => {
+  const cell = e.target.closest('.preview-table [contenteditable="true"]');
+  if (!cell) return;
+  cell.classList.toggle('cell-flagged', previewCellIsFlagged(cell.textContent));
+  const card = cell.closest('[data-preview-type]');
+  if (card) setCardDirty(card, true);
+});
+// Force plain-text paste into editable cells, so formatting/HTML can't sneak in.
+document.addEventListener('paste', (e) => {
+  const cell = e.target.closest('.preview-table [contenteditable="true"]');
+  if (!cell) return;
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+  document.execCommand('insertText', false, text);
 });
 
 // ── Shared drag & drop ─────────────────────────────────────────────────────
@@ -1136,24 +1550,26 @@ function afShowResults(results) {
       r.tags    ? `<span class="badge purple"><i class="bi bi-tags-fill"></i> Tags ✓</span>`   : `<span class="badge amber">No Tags</span>`,
       r.answers ? `<span class="badge green"><i class="bi bi-check-circle-fill"></i> Answers ✓</span>` : `<span class="badge amber">No Answers</span>`,
       isErr     ? `<span class="badge red">Error</span>`          : `<span class="badge green">Done ✓</span>`,
+      isErr ? '' : previewFlaggedBadge(r.columns || [], r.preview || []),
     ].join('');
     const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${pdfEscapeHtml(w)}</div>`).join('')}</div>` : '';
     const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(r.error)}</div>` : '';
-    const dl     = r.output ? `<a class="dl-btn" href="/autofill/download/${encodeURIComponent(r.output)}"><i class="bi bi-download"></i> Download</a>` : '';
+    const actions = r.output
+      ? previewResultActions('autofill', r.output, `/autofill/download/${encodeURIComponent(r.output)}`)
+      : '';
 
     let tableHtml = '';
     if (!isErr && r.columns?.length) {
-      const theadCells = r.columns.map(c => `<th>${pdfEscapeHtml(c)}</th>`).join('');
-      const bodyRows   = r.preview.map(row => `<tr>${row.map(v => `<td>${pdfEscapeHtml(v)}</td>`).join('')}</tr>`).join('');
-      tableHtml = `<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table"><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
+      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(r.columns, r.preview);
+      tableHtml = `${previewZoomControls()}<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
     }
 
-    return `<div class="preview-card ${cls}">
+    return `<div class="preview-card ${cls}" data-preview-type="autofill" data-filename="${r.output ? pdfEscapeHtml(r.output) : ''}" data-dirty="false">
       <div class="result-name">${pdfEscapeHtml(r.base)}</div>
       <div class="badge-row">${badges}</div>
       ${warns}${errMsg}
       ${tableHtml}
-      <div class="result-actions">${dl}</div>
+      <div class="result-actions">${actions}</div>
     </div>`;
   }).join('');
 }
@@ -1364,14 +1780,16 @@ async function scLoadResultPreviews() {
       }
       // First two columns are the student's name and code, not a question —
       // everything after that is "Item 1", "Item 2", ... in order. This row
-      // is preview-only, purely computed here — the downloaded file is untouched.
+      // is preview-only, purely computed (not contenteditable, not part of
+      // the saved grid) — the downloaded file is untouched by it.
       const itemNoCells = data.columns.map((_, i) => {
         const itemNo = i - 2;
         return `<th>${itemNo >= 0 ? itemNo + 1 : ''}</th>`;
       }).join('');
-      const theadCells = data.columns.map(c => `<th>${pdfEscapeHtml(c)}</th>`).join('');
-      const bodyRows = data.preview.map(row => `<tr>${row.map(v => `<td>${pdfEscapeHtml(v)}</td>`).join('')}</tr>`).join('');
-      slot.innerHTML = `<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table"><thead><tr class="item-no-row">${itemNoCells}</tr><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
+      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(data.columns, data.preview, scItemColWidth);
+      const flaggedBadge = previewFlaggedBadge(data.columns, data.preview);
+      const badgeRow = flaggedBadge ? `<div class="badge-row">${flaggedBadge}</div>` : '';
+      slot.innerHTML = `${badgeRow}${previewZoomControls()}<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr class="item-no-row">${itemNoCells}</tr><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
     } catch (e) {
       slot.innerHTML = `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> Unexpected error: ${pdfEscapeHtml(e.message)}</div>`;
     }
@@ -1404,7 +1822,7 @@ function pdfRenderList() {
     const badgeCls   = 'layout-badge' + (f.overall === 'mixed' ? ' mixed' : '');
     const enc        = encodeURIComponent(f.name);
     const curLayout  = pdfLayoutOverrides[f.name] || 'auto';
-    const curChoices = pdfChoiceCounts[f.name] || 4;
+    const curChoices = pdfChoiceCounts[f.name] || 5;
 
     const layoutRow = `<div class="layout-row">
       <span class="${badgeCls}">Detected: ${pdfLayoutLabel(f.overall)}</span>
@@ -1449,7 +1867,7 @@ async function pdfHandle(files) {
     if (!pdfFiles.some(f => f.name === u.name)) {
       pdfFiles.push({ name: u.name, overall: u.layout?.overall || 'single' });
       pdfLayoutOverrides[u.name] = 'auto';
-      pdfChoiceCounts[u.name] = 4;
+      pdfChoiceCounts[u.name] = 5;
     }
   });
   pdfRenderList(); pdfSyncBtn();
@@ -1505,24 +1923,26 @@ function pdfShowResults(results) {
     const badges = [
       `<span class="badge blue">${r.questions ?? 0} questions</span>`,
       isErr ? `<span class="badge red">Error</span>` : `<span class="badge green">Done ✓</span>`,
+      isErr ? '' : previewFlaggedBadge(r.columns || [], r.preview || []),
     ].join('');
     const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${pdfEscapeHtml(w)}</div>`).join('')}</div>` : '';
     const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(r.error)}</div>` : '';
-    const dl     = r.output ? `<a class="dl-btn" href="/pdf/download/${encodeURIComponent(r.output)}"><i class="bi bi-download"></i> Download</a>` : '';
+    const actions = r.output
+      ? previewResultActions('pdf', r.output, `/pdf/download/${encodeURIComponent(r.output)}`)
+      : '';
 
     let tableHtml = '';
     if (!isErr && r.columns?.length) {
-      const theadCells = r.columns.map(c => `<th>${pdfEscapeHtml(c)}</th>`).join('');
-      const bodyRows   = r.preview.map(row => `<tr>${row.map(v => `<td>${pdfEscapeHtml(v)}</td>`).join('')}</tr>`).join('');
-      tableHtml = `<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table"><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
+      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(r.columns, r.preview);
+      tableHtml = `${previewZoomControls()}<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
     }
 
-    return `<div class="preview-card ${cls}">
+    return `<div class="preview-card ${cls}" data-preview-type="pdf" data-filename="${r.output ? pdfEscapeHtml(r.output) : ''}" data-dirty="false">
       <div class="result-name"><i class="bi bi-file-earmark-pdf-fill"></i> ${r.name}</div>
       <div class="badge-row">${badges}</div>
       ${warns}${errMsg}
       ${tableHtml}
-      <div class="result-actions">${dl}</div>
+      <div class="result-actions">${actions}</div>
     </div>`;
   }).join('');
 }
