@@ -400,6 +400,25 @@
     }
     .col-resize-handle:hover, .col-resize-handle.is-resizing { background: rgba(59,130,246,.4); }
 
+    /* ── Sticky/"frozen" leading columns — e.g. a student's name + matched
+       code, or a question's number + text — stay put while the rest of a
+       wide table scrolls horizontally, Excel-style. left offset is set
+       inline per column (see previewEditableCells / syncPreviewStickyOffsets)
+       since it depends on the actual (resizable) width of earlier columns. ── */
+    .preview-table td.sticky-col {
+      position: sticky; z-index: 2; background: #fff;
+    }
+    .preview-table th.sticky-col {
+      position: sticky; z-index: 3; /* above both the plain sticky header (z-index:1) and sticky body cells */
+    }
+    .preview-table tbody tr:hover td.sticky-col { background: #eff6ff; }
+    .preview-table tbody tr.row-selected td.sticky-col { background: #bfdbfe; }
+    .preview-table tbody tr td.sticky-col.cell-flagged { background: #fef2f2; }
+    /* A right-edge shadow on the last frozen column marks where the "frozen
+       pane" ends and the scrollable columns begin — otherwise it's not
+       obvious anything is pinned once the rest has scrolled under it. */
+    .preview-table .sticky-col-end { box-shadow: 2px 0 4px -1px rgba(0,0,0,.12); }
+
     /* ── Per-preview zoom — scales the whole table (text, padding, columns) ── */
     .zoom-controls {
       display: flex; align-items: center; gap: .3rem;
@@ -1059,38 +1078,105 @@ const PREVIEW_SAVE_URL = {
 // are commonly blank simply because that particular question has fewer
 // choices, not because anything went wrong.
 const PREVIEW_REQUIRED_COLUMNS = new Set(['Question', 'Choice1', 'Choice2', 'Choice_3', 'Choice_4']);
+const PREVIEW_CHOICE_COL_RE = /^Choice_?\d+$/;
+// Prepare Exam Template: after the Tags file is merged in, these
+// classification columns should always be filled in for every row — a blank
+// one usually means that question didn't get matched during the merge.
+const PREVIEW_EXAM_TEMPLATE_REQUIRED_COLUMNS = new Set(['Content Standards', 'Competency', 'TOPIC', 'THINKING SKILLS', 'DOMAIN']);
+// Convert Student Answer: the first two columns are always the scanned
+// sheet's matched full name and matched student code (their real header, as
+// written back by ans_reader.py's Excel round-trip, is just a blank/"Unnamed"
+// cell — so these have to be matched by position, not by column name).
+const PREVIEW_SCANTRON_REQUIRED_INDEXES = new Map([[0, 'Fullname'], [1, 'Best Match']]);
 
-function previewCellIsFlagged(v, columnName) {
-  // Scanned-answer problems (out-of-range letter, blank "*") carry a "⚠"
-  // marker written directly into the cell text.
-  if (typeof v === 'string' && v.includes('⚠')) return true;
-  // A required column left blank is also a problem, even though nothing is
-  // written into the cell for it — the highlight is preview-only here.
-  if (columnName && PREVIEW_REQUIRED_COLUMNS.has(columnName)) {
-    return v === null || v === undefined || String(v).trim() === '';
+// Some checks (a choice repeated within the same question — e.g. the source
+// PDF mislabeled two choices "B" so the real "C" never got captured, or the
+// same question number used twice) need to look across a whole row or a
+// whole column, not just one cell in isolation. So flags are computed once
+// per table, up front, rather than cell-by-cell.
+function computePreviewFlags(columns, rows, opts) {
+  opts = opts || {};
+  const extraRequiredColumns = opts.extraRequiredColumns;
+  const requiredIndexes = opts.requiredIndexes; // Map<colIndex, friendly label>
+  const flagged = new Set();      // "row,col" keys
+  const titles = new Map();       // "row,col" -> tooltip text
+  const mark = (r, c, title) => {
+    const key = `${r},${c}`;
+    flagged.add(key);
+    if (title) titles.set(key, title);
+  };
+
+  const requiredColumns = extraRequiredColumns
+    ? new Set([...PREVIEW_REQUIRED_COLUMNS, ...extraRequiredColumns])
+    : PREVIEW_REQUIRED_COLUMNS;
+  const qIdx = columns.indexOf('Question No.');
+  const choiceCols = columns
+    .map((name, i) => ({ name, i }))
+    .filter(({ name }) => PREVIEW_CHOICE_COL_RE.test(name));
+
+  rows.forEach((row, r) => {
+    // Per-cell checks: scanned-answer "⚠" marker, or a blank required column.
+    row.forEach((v, c) => {
+      const name = columns[c];
+      const isBlank = v === null || v === undefined || String(v).trim() === '';
+      if (typeof v === 'string' && v.includes('⚠')) {
+        mark(r, c, '');
+      } else if (requiredColumns.has(name) && isBlank) {
+        const title = extraRequiredColumns && extraRequiredColumns.has(name)
+          ? `Blank ${name} — check the Tags file, this usually means the question wasn't matched during the merge`
+          : `Blank ${name} — check the source file, this usually means it didn't come through correctly`;
+        mark(r, c, title);
+      } else if (requiredIndexes && requiredIndexes.has(c) && isBlank) {
+        const label = requiredIndexes.get(c);
+        mark(r, c, `Blank ${label} — this scanned sheet's name/code couldn't be matched to a student, check the file and students.xlsx`);
+      }
+    });
+
+    // Same choice text appearing twice in one question — a strong sign the
+    // source mislabeled a choice (e.g. "A, B, B, D" instead of "A, B, C, D"),
+    // silently dropping the real choice and duplicating another one instead.
+    const seenText = new Map(); // lowercased choice text -> first column index
+    choiceCols.forEach(({ name, i }) => {
+      const text = typeof row[i] === 'string' ? row[i].trim() : '';
+      if (!text) return;
+      const key = text.toLowerCase();
+      if (seenText.has(key)) {
+        const firstI = seenText.get(key);
+        mark(r, firstI, `Same text as ${columns[i]} — check for a duplicated or mislabeled choice, e.g. A, B, B, D instead of A, B, C, D`);
+        mark(r, i, `Same text as ${columns[firstI]} — check for a duplicated or mislabeled choice, e.g. A, B, B, D instead of A, B, C, D`);
+      } else {
+        seenText.set(key, i);
+      }
+    });
+  });
+
+  // Same Question No. used on more than one row.
+  if (qIdx >= 0) {
+    const counts = new Map();
+    rows.forEach(row => {
+      const q = String(row[qIdx] ?? '').trim();
+      if (q) counts.set(q, (counts.get(q) || 0) + 1);
+    });
+    rows.forEach((row, r) => {
+      const q = String(row[qIdx] ?? '').trim();
+      if (q && counts.get(q) > 1) {
+        mark(r, qIdx, `Question No. ${q} is used ${counts.get(q)} times — check for a duplicate or missing number`);
+      }
+    });
   }
-  return false;
+
+  return { flagged, titles };
 }
 
-function previewCellFlagTitle(v, columnName) {
-  if (typeof v === 'string' && v.includes('⚠')) return '';
-  if (columnName && PREVIEW_REQUIRED_COLUMNS.has(columnName)) {
-    return `Blank ${columnName} — check the source file, this usually means it didn't come through correctly`;
-  }
-  return '';
+function previewFlaggedCount(columns, rows, opts) {
+  return computePreviewFlags(columns, rows, opts).flagged.size;
 }
 
-function previewFlaggedCount(columns, rows) {
-  let n = 0;
-  rows.forEach(row => row.forEach((v, i) => { if (previewCellIsFlagged(v, columns[i])) n++; }));
-  return n;
-}
-
-function previewFlaggedBadge(columns, rows) {
+function previewFlaggedBadge(columns, rows, opts) {
   // A clickable summary badge — without it, a flagged cell buried in row 80
   // of 100 is easy to scroll straight past. Click cycles through every
   // flagged cell in this card, scrolling each into view in turn.
-  const count = previewFlaggedCount(columns, rows);
+  const count = previewFlaggedCount(columns, rows, opts);
   if (!count) return '';
   return `<button type="button" class="badge red flagged-badge" data-flag-index="0" onclick="jumpToFlaggedCell(this)">
     <i class="bi bi-exclamation-triangle-fill"></i> <span class="flag-jump-label">${count} flagged — click to review</span>
@@ -1111,7 +1197,7 @@ function jumpToFlaggedCell(btn) {
   btn.querySelector('.flag-jump-label').textContent = `${cells.length} flagged — ${idx + 1} of ${cells.length}`;
 }
 
-function previewEditableCells(columns, rows, colWidthFn) {
+function previewEditableCells(columns, rows, colWidthFn, opts) {
   // Shared cell markup for every editable preview table: header + body cells
   // carry contenteditable so typing directly edits them in place. Each
   // column gets its own <col> width (via colWidthFn, default a narrow 90px —
@@ -1128,18 +1214,37 @@ function previewEditableCells(columns, rows, colWidthFn) {
   const widths = columns.map((_, i) => widthFor(i, columns[i]));
   const totalWidth = widths.reduce((a, b) => a + b, 0);
   const colgroup = widths.map(w => `<col style="width:${w}px">`).join('');
-  const theadCells = columns.map((c, i) => `<th>
+
+  // Leading columns (e.g. a student's name/code, or a question's number/text)
+  // can stay pinned in place while the rest of a wide table scrolls
+  // horizontally — same "frozen pane" idea as Excel. stickyLeft[i] is that
+  // column's left offset (the sum of every sticky column's width before it);
+  // undefined for a non-sticky column.
+  const stickyCount = (opts && opts.stickyCount) || 0;
+  const stickyLeft = [];
+  let stickyCum = 0;
+  for (let i = 0; i < stickyCount; i++) {
+    stickyLeft[i] = stickyCum;
+    stickyCum += widths[i] || 0;
+  }
+  const stickyClass = (i) => i >= stickyCount ? '' : (i === stickyCount - 1 ? 'sticky-col sticky-col-end' : 'sticky-col');
+  const stickyStyle = (i) => i < stickyCount ? `left:${stickyLeft[i]}px` : '';
+
+  const theadCells = columns.map((c, i) => `<th class="${stickyClass(i)}" style="${stickyStyle(i)}">
       <div class="th-inner" contenteditable="true">${pdfEscapeHtml(c)}</div>
       <div class="col-resize-handle" data-col-index="${i}" title="Drag to resize, double-click to fit"></div>
     </th>`).join('');
-  const bodyRows = rows.map(row =>
+  const { flagged: flaggedCells, titles: flagTitles } = computePreviewFlags(columns, rows, opts);
+  const bodyRows = rows.map((row, r) =>
     `<tr>${row.map((v, i) => {
-      const flagged = previewCellIsFlagged(v, columns[i]);
-      const title = flagged ? ` title="${pdfEscapeHtml(previewCellFlagTitle(v, columns[i]))}"` : '';
-      return `<td contenteditable="true" class="${flagged ? 'cell-flagged' : ''}"${title}>${pdfEscapeHtml(v)}</td>`;
+      const key = `${r},${i}`;
+      const isFlagged = flaggedCells.has(key);
+      const title = isFlagged && flagTitles.get(key) ? ` title="${pdfEscapeAttr(flagTitles.get(key))}"` : '';
+      const cls = `${isFlagged ? 'cell-flagged ' : ''}${stickyClass(i)}`.trim();
+      return `<td contenteditable="true" class="${cls}" style="${stickyStyle(i)}"${title}>${pdfEscapeHtml(v)}</td>`;
     }).join('')}</tr>`
   ).join('');
-  return { colgroup, theadCells, bodyRows, totalWidth };
+  return { colgroup, theadCells, bodyRows, totalWidth, widths };
 }
 
 function scItemColWidth(i) {
@@ -1193,6 +1298,29 @@ function syncPreviewTableWidth(table) {
   table.style.width = total + 'px';
 }
 
+function syncPreviewStickyOffsets(table) {
+  // A sticky column's left offset is the combined width of every sticky
+  // column before it — resizing (or auto-fitting) any of those columns has
+  // to re-push every sticky column after it, or the "frozen pane" drifts out
+  // of alignment with the columns scrolling underneath it.
+  const cols = table.querySelectorAll(':scope > colgroup > col');
+  const widths = Array.from(cols).map(c => parseFloat(c.style.width) || 0);
+  const headRows = table.querySelectorAll(':scope > thead > tr');
+  const headRow = headRows[headRows.length - 1];
+  if (!headRow) return;
+  const stickyIdxs = [];
+  Array.from(headRow.children).forEach((th, i) => { if (th.classList.contains('sticky-col')) stickyIdxs.push(i); });
+  if (!stickyIdxs.length) return;
+  let cum = 0;
+  const bodyTrs = table.querySelectorAll(':scope > tbody > tr');
+  stickyIdxs.forEach(i => {
+    const left = cum + 'px';
+    headRows.forEach(hr => { const cell = hr.children[i]; if (cell) cell.style.left = left; });
+    bodyTrs.forEach(tr => { const cell = tr.children[i]; if (cell) cell.style.left = left; });
+    cum += widths[i] || 0;
+  });
+}
+
 document.addEventListener('mousedown', (e) => {
   const handle = e.target.closest('.col-resize-handle');
   if (!handle) return;
@@ -1216,6 +1344,7 @@ document.addEventListener('mousedown', (e) => {
     const delta = (ev.clientX - startX) / (zoom || 1);
     col.style.width = Math.max(28, startWidth + delta) + 'px';
     syncPreviewTableWidth(table);
+    syncPreviewStickyOffsets(table);
   }
   function onUp() {
     handle.classList.remove('is-resizing');
@@ -1263,6 +1392,7 @@ function autoFitPreviewColumn(table, col, colIndex) {
   const cellPadding = 24; // matches the cell's own left+right padding, plus a little breathing room
   col.style.width = Math.min(520, Math.max(32, Math.ceil(maxWidth) + cellPadding)) + 'px';
   syncPreviewTableWidth(table);
+  syncPreviewStickyOffsets(table);
 }
 
 function previewResultActions(previewType, filename, downloadUrl) {
@@ -1347,10 +1477,52 @@ async function downloadAllWithEdits(event, link, containerId) {
   window.location.href = link.href;
 }
 
+function refreshPreviewTableFlags(table) {
+  // Re-run every flag check (blank/⚠/duplicate choice/duplicate Question
+  // No.) against the table's current, possibly-just-edited state, and
+  // re-apply highlighting across every cell — an edit to one cell can
+  // change another cell's duplicate status too (e.g. fixing a duplicated
+  // choice un-flags both the cell you're typing in and its former match).
+  const headRows = table.querySelectorAll('thead tr');
+  const headRow = headRows[headRows.length - 1];
+  if (!headRow) return;
+  const columns = Array.from(headRow.children).map(c => c.textContent.trim());
+  const bodyTrs = table.querySelectorAll('tbody tr');
+  const rows = Array.from(bodyTrs).map(tr => Array.from(tr.children).map(td => td.textContent));
+  const card = table.closest('.preview-card');
+  const previewType = card && card.dataset.previewType;
+  const opts = previewType === 'autofill' ? { extraRequiredColumns: PREVIEW_EXAM_TEMPLATE_REQUIRED_COLUMNS }
+    : previewType === 'scantron' ? { requiredIndexes: PREVIEW_SCANTRON_REQUIRED_INDEXES }
+    : undefined;
+  const { flagged, titles } = computePreviewFlags(columns, rows, opts);
+  bodyTrs.forEach((tr, r) => {
+    Array.from(tr.children).forEach((td, c) => {
+      const key = `${r},${c}`;
+      const isFlagged = flagged.has(key);
+      td.classList.toggle('cell-flagged', isFlagged);
+      if (isFlagged && titles.get(key)) td.setAttribute('title', titles.get(key));
+      else td.removeAttribute('title');
+    });
+  });
+
+  // Keep the card's summary badge in sync — editing can fix a flagged cell
+  // (or introduce a new duplicate) without a full re-fetch of the preview.
+  const badge = card ? card.querySelector('.flagged-badge') : null;
+  if (badge) {
+    if (flagged.size) {
+      badge.querySelector('.flag-jump-label').textContent = `${flagged.size} flagged — click to review`;
+      badge.dataset.flagIndex = '0';
+    } else {
+      badge.remove();
+    }
+  }
+}
+
 document.addEventListener('input', (e) => {
   const cell = e.target.closest('.preview-table [contenteditable="true"]');
   if (!cell) return;
-  cell.classList.toggle('cell-flagged', previewCellIsFlagged(cell.textContent));
+  const table = cell.closest('.preview-table');
+  if (table) refreshPreviewTableFlags(table);
   const card = cell.closest('[data-preview-type]');
   if (card) setCardDirty(card, true);
 });
@@ -1545,12 +1717,13 @@ function afShowResults(results) {
     const isErr  = r.status === 'error';
     const hasW   = r.warnings?.length;
     const cls    = isErr ? 'error' : hasW ? 'warn' : '';
+    const afOpts = { extraRequiredColumns: PREVIEW_EXAM_TEMPLATE_REQUIRED_COLUMNS };
     const badges = [
       `<span class="badge blue">${r.rows} rows</span>`,
       r.tags    ? `<span class="badge purple"><i class="bi bi-tags-fill"></i> Tags ✓</span>`   : `<span class="badge amber">No Tags</span>`,
       r.answers ? `<span class="badge green"><i class="bi bi-check-circle-fill"></i> Answers ✓</span>` : `<span class="badge amber">No Answers</span>`,
       isErr     ? `<span class="badge red">Error</span>`          : `<span class="badge green">Done ✓</span>`,
-      isErr ? '' : previewFlaggedBadge(r.columns || [], r.preview || []),
+      isErr ? '' : previewFlaggedBadge(r.columns || [], r.preview || [], afOpts),
     ].join('');
     const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${pdfEscapeHtml(w)}</div>`).join('')}</div>` : '';
     const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(r.error)}</div>` : '';
@@ -1560,7 +1733,7 @@ function afShowResults(results) {
 
     let tableHtml = '';
     if (!isErr && r.columns?.length) {
-      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(r.columns, r.preview);
+      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(r.columns, r.preview, undefined, afOpts);
       tableHtml = `${previewZoomControls()}<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
     }
 
@@ -1778,16 +1951,20 @@ async function scLoadResultPreviews() {
         slot.innerHTML = `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(data.error)}</div>`;
         continue;
       }
-      // First two columns are the student's name and code, not a question —
-      // everything after that is "Item 1", "Item 2", ... in order. This row
-      // is preview-only, purely computed (not contenteditable, not part of
-      // the saved grid) — the downloaded file is untouched by it.
+      // First two columns are the student's name and matched code, not a
+      // question — everything after that is "Item 1", "Item 2", ... in
+      // order. This row is preview-only, purely computed (not
+      // contenteditable, not part of the saved grid) — the downloaded file
+      // is untouched by it. Same two columns stay pinned ("frozen") while
+      // the rest of the table scrolls horizontally.
+      const scOpts = { requiredIndexes: PREVIEW_SCANTRON_REQUIRED_INDEXES, stickyCount: 2 };
+      const { colgroup, theadCells, bodyRows, totalWidth, widths } = previewEditableCells(data.columns, data.preview, scItemColWidth, scOpts);
       const itemNoCells = data.columns.map((_, i) => {
         const itemNo = i - 2;
-        return `<th>${itemNo >= 0 ? itemNo + 1 : ''}</th>`;
+        const sticky = i < 2 ? ` class="sticky-col${i === 1 ? ' sticky-col-end' : ''}" style="left:${widths.slice(0, i).reduce((a, b) => a + b, 0)}px"` : '';
+        return `<th${sticky}>${itemNo >= 0 ? itemNo + 1 : ''}</th>`;
       }).join('');
-      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(data.columns, data.preview, scItemColWidth);
-      const flaggedBadge = previewFlaggedBadge(data.columns, data.preview);
+      const flaggedBadge = previewFlaggedBadge(data.columns, data.preview, scOpts);
       const badgeRow = flaggedBadge ? `<div class="badge-row">${flaggedBadge}</div>` : '';
       slot.innerHTML = `${badgeRow}${previewZoomControls()}<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr class="item-no-row">${itemNoCells}</tr><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
     } catch (e) {
@@ -1806,6 +1983,13 @@ function pdfEscapeHtml(s) {
   const div = document.createElement('div');
   div.textContent = s ?? '';
   return div.innerHTML;
+}
+function pdfEscapeAttr(s) {
+  // pdfEscapeHtml is safe for text nodes but doesn't escape quotes — fine
+  // inside a tag's content, but a literal " breaks a title="..." attribute
+  // early. Column names are now user-editable (live flag refresh reads them
+  // straight from the DOM), so a renamed header could carry one.
+  return pdfEscapeHtml(s).replace(/"/g, '&quot;');
 }
 function pdfSyncBtn() {
   document.getElementById('pdf-process-btn').disabled = pdfFiles.length === 0;
@@ -1920,10 +2104,14 @@ function pdfShowResults(results) {
     const isErr  = r.status === 'error';
     const hasW   = r.warnings?.length;
     const cls    = isErr ? 'error' : hasW ? 'warn' : '';
+    // "Question No." and "Question" stay pinned while the choice columns
+    // scroll horizontally — they're always the first two columns (see
+    // pdf_config.COLUMN_ORDER).
+    const pdfOpts = { stickyCount: 2 };
     const badges = [
       `<span class="badge blue">${r.questions ?? 0} questions</span>`,
       isErr ? `<span class="badge red">Error</span>` : `<span class="badge green">Done ✓</span>`,
-      isErr ? '' : previewFlaggedBadge(r.columns || [], r.preview || []),
+      isErr ? '' : previewFlaggedBadge(r.columns || [], r.preview || [], pdfOpts),
     ].join('');
     const warns  = hasW ? `<div class="warn-list">${r.warnings.map(w=>`<div class="warn-item"><i class="bi bi-exclamation-triangle-fill"></i> ${pdfEscapeHtml(w)}</div>`).join('')}</div>` : '';
     const errMsg = isErr ? `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(r.error)}</div>` : '';
@@ -1933,7 +2121,7 @@ function pdfShowResults(results) {
 
     let tableHtml = '';
     if (!isErr && r.columns?.length) {
-      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(r.columns, r.preview);
+      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(r.columns, r.preview, undefined, pdfOpts);
       tableHtml = `${previewZoomControls()}<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
     }
 
