@@ -97,6 +97,9 @@
       border-color: rgba(255,255,255,.18);
     }
 
+    /* ── Edit PDF tab: editor fills the space under the header ── */
+    .pdf-editor-frame { display: block; width: 100%; height: calc(100dvh - 64px); border: 0; }
+
     /* ── Page ── */
     .page { max-width: 1160px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
 
@@ -351,6 +354,16 @@
     .radio-group input[type=radio] { accent-color: var(--accent); margin: 0; cursor: pointer; }
     .choices-row { display: flex; align-items: center; gap: .4rem; width: 100%; margin-top: .25rem; }
 
+    /* ── Per-card "exclude a column at download time" option (Convert
+       Student Answer) — the stored file always keeps the column; this only
+       affects what the Download button actually hands you. ── */
+    .sc-exclude-fullname-row {
+      display: flex; align-items: center; gap: .4rem; font-size: .72rem; color: #334155;
+      cursor: pointer; margin: .5rem 0; padding: .4rem .6rem;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+    }
+    .sc-exclude-fullname-row input[type=checkbox] { accent-color: var(--accent); margin: 0; cursor: pointer; flex-shrink: 0; }
+
     /* ── Excel preview table (per converted file, before download) ── */
     .preview-card {
       background: white; border-radius: 12px; padding: 1rem 1.1rem;
@@ -366,6 +379,10 @@
     .preview-table-wrap {
       overflow-x: auto; overflow-y: hidden;
       border: 1px solid #e2e8f0; border-radius: 8px; margin: .6rem 0;
+      /* Breathing room between the table itself and the horizontal
+         scrollbar sitting right below it — without this the scrollbar
+         track touches the last row directly. */
+      padding-bottom: .6rem;
     }
     .preview-table-scroll { overflow-y: auto; max-height: 460px; }
     /* table-layout:fixed + a <colgroup> lets each column hold a precise,
@@ -436,10 +453,6 @@
     }
     .zoom-level:hover { color: #334155; text-decoration: underline; }
 
-    .preview-table .item-no-row th {
-      font-size: .64rem; font-weight: 500; color: #94a3b8;
-      text-align: center; padding: .2rem .55rem; background: #fcfcfd;
-    }
     /* Hover + click-to-select a row, so it's easy to keep your place while
        scrolling a long preview. */
     .preview-table tbody tr { cursor: pointer; }
@@ -613,6 +626,9 @@
     </button>
     <button class="tab-btn scantron" data-tab="scantron" onclick="switchTab('scantron')">
       Convert Student Answer
+    </button>
+    <button class="tab-btn pdfedit" data-tab="pdfedit" onclick="switchTab('pdfedit')">
+      Edit PDF
     </button>
   </nav>
 </header>
@@ -827,6 +843,12 @@
       <div class="preview-card" data-preview-type="scantron" data-filename="{{ f }}" data-dirty="false">
         <div class="result-name"><i class="bi bi-file-earmark-spreadsheet"></i> {{ f }}</div>
         <div class="sc-preview-slot"><div class="empty-note">Loading preview…</div></div>
+        {% if f.endswith('_student_answer.xlsx') %}
+        <label class="sc-exclude-fullname-row">
+          <input type="checkbox" class="sc-exclude-fullname">
+          Exclude the Fullname column (it's only there for checking) — applied when you download
+        </label>
+        {% endif %}
         <div class="result-actions">
           <span class="badge amber dirty-badge"><i class="bi bi-circle-fill" style="font-size:.5rem"></i> Unsaved edits</span>
           <button type="button" class="save-btn" onclick="saveCardEdits(this.closest('[data-preview-type]'))">
@@ -1031,6 +1053,16 @@
 </div></div><!-- /tab-pdf -->
 
 
+<!-- ══════════════════════════════════════════════
+     TAB 4 — EDIT PDF
+     The editor runs entirely in the browser; it lives in its own page
+     (/pdf-editor) and is framed here so its styles can't clash with this one.
+══════════════════════════════════════════════ -->
+<div id="tab-pdfedit" class="tab-section" style="display:none">
+  <iframe id="pdf-editor-frame" class="pdf-editor-frame" title="PDF Editor" data-src="{{ url_for('pdf_editor', embed=1) }}"></iframe>
+</div><!-- /tab-pdfedit -->
+
+
 <script>
 // ── Tab switching ──────────────────────────────────────────────────────────
 function switchTab(tab) {
@@ -1041,6 +1073,9 @@ function switchTab(tab) {
     b.classList.toggle('active', b.dataset.tab === tab)
   );
   localStorage.setItem('activeTab', tab);
+  // Load the editor only the first time its tab is opened.
+  const frame = document.getElementById('pdf-editor-frame');
+  if (tab === 'pdfedit' && !frame.getAttribute('src')) frame.src = frame.dataset.src;
 }
 window.addEventListener('DOMContentLoaded', () => {
   const serverTab = "{{ active_tab }}";
@@ -1084,10 +1119,10 @@ const PREVIEW_CHOICE_COL_RE = /^Choice_?\d+$/;
 // one usually means that question didn't get matched during the merge.
 const PREVIEW_EXAM_TEMPLATE_REQUIRED_COLUMNS = new Set(['Content Standards', 'Competency', 'TOPIC', 'THINKING SKILLS', 'DOMAIN']);
 // Convert Student Answer: the first two columns are always the scanned
-// sheet's matched full name and matched student code (their real header, as
-// written back by ans_reader.py's Excel round-trip, is just a blank/"Unnamed"
-// cell — so these have to be matched by position, not by column name).
-const PREVIEW_SCANTRON_REQUIRED_INDEXES = new Map([[0, 'Fullname'], [1, 'Best Match']]);
+// sheet's matched full name and matched student code — the preview shows
+// plain spreadsheet column letters (A, B, C...) instead of real header text
+// (see app.py's preview_output), so these have to be matched by position.
+const PREVIEW_SCANTRON_REQUIRED_INDEXES = new Map([[0, 'Fullname'], [1, 'studentno']]);
 
 // Some checks (a choice repeated within the same question — e.g. the source
 // PDF mislabeled two choices "B" so the real "C" never got captured, or the
@@ -1098,6 +1133,10 @@ function computePreviewFlags(columns, rows, opts) {
   opts = opts || {};
   const extraRequiredColumns = opts.extraRequiredColumns;
   const requiredIndexes = opts.requiredIndexes; // Map<colIndex, friendly label>
+  // Convert Student Answer's own leading rows (blank, "CORRECT ANSWER",
+  // "studentno") are legitimately blank/label-only, not a scanned sheet
+  // that failed to match — requiredIndexes shouldn't fire on those.
+  const requiredIndexesFromRow = opts.requiredIndexesFromRow || 0;
   const flagged = new Set();      // "row,col" keys
   const titles = new Map();       // "row,col" -> tooltip text
   const mark = (r, c, title) => {
@@ -1126,7 +1165,7 @@ function computePreviewFlags(columns, rows, opts) {
           ? `Blank ${name} — check the Tags file, this usually means the question wasn't matched during the merge`
           : `Blank ${name} — check the source file, this usually means it didn't come through correctly`;
         mark(r, c, title);
-      } else if (requiredIndexes && requiredIndexes.has(c) && isBlank) {
+      } else if (requiredIndexes && requiredIndexes.has(c) && isBlank && r >= requiredIndexesFromRow) {
         const label = requiredIndexes.get(c);
         mark(r, c, `Blank ${label} — this scanned sheet's name/code couldn't be matched to a student, check the file and students.xlsx`);
       }
@@ -1455,14 +1494,27 @@ async function saveCardEdits(card) {
   }
 }
 
+function downloadUrlFor(card, baseHref) {
+  const cb = card ? card.querySelector('.sc-exclude-fullname') : null;
+  if (!cb || !cb.checked) return baseHref;
+  return baseHref + (baseHref.includes('?') ? '&' : '?') + 'exclude_fullname=1';
+}
+
 async function downloadPreviewCard(event, link) {
   const card = link.closest('[data-preview-type]');
+  const targetUrl = downloadUrlFor(card, link.href);
   if (card && card.dataset.dirty === 'true') {
     event.preventDefault();
     const ok = await saveCardEdits(card);
-    if (ok) window.location.href = link.href;
+    if (ok) window.location.href = targetUrl;
+    return false;
   }
-  // not dirty — let the click proceed as a normal download link
+  if (targetUrl !== link.href) {
+    event.preventDefault();
+    window.location.href = targetUrl;
+    return false;
+  }
+  // not dirty and no exclude-fullname requested — let the click proceed as a normal download link
 }
 
 async function downloadAllWithEdits(event, link, containerId) {
@@ -1492,7 +1544,7 @@ function refreshPreviewTableFlags(table) {
   const card = table.closest('.preview-card');
   const previewType = card && card.dataset.previewType;
   const opts = previewType === 'autofill' ? { extraRequiredColumns: PREVIEW_EXAM_TEMPLATE_REQUIRED_COLUMNS }
-    : previewType === 'scantron' ? { requiredIndexes: PREVIEW_SCANTRON_REQUIRED_INDEXES }
+    : previewType === 'scantron' ? { requiredIndexes: PREVIEW_SCANTRON_REQUIRED_INDEXES, requiredIndexesFromRow: 3 }
     : undefined;
   const { flagged, titles } = computePreviewFlags(columns, rows, opts);
   bodyTrs.forEach((tr, r) => {
@@ -1951,22 +2003,17 @@ async function scLoadResultPreviews() {
         slot.innerHTML = `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> ${pdfEscapeHtml(data.error)}</div>`;
         continue;
       }
-      // First two columns are the student's name and matched code, not a
-      // question — everything after that is "Item 1", "Item 2", ... in
-      // order. This row is preview-only, purely computed (not
-      // contenteditable, not part of the saved grid) — the downloaded file
-      // is untouched by it. Same two columns stay pinned ("frozen") while
-      // the rest of the table scrolls horizontally.
-      const scOpts = { requiredIndexes: PREVIEW_SCANTRON_REQUIRED_INDEXES, stickyCount: 2 };
-      const { colgroup, theadCells, bodyRows, totalWidth, widths } = previewEditableCells(data.columns, data.preview, scItemColWidth, scOpts);
-      const itemNoCells = data.columns.map((_, i) => {
-        const itemNo = i - 2;
-        const sticky = i < 2 ? ` class="sticky-col${i === 1 ? ' sticky-col-end' : ''}" style="left:${widths.slice(0, i).reduce((a, b) => a + b, 0)}px"` : '';
-        return `<th${sticky}>${itemNo >= 0 ? itemNo + 1 : ''}</th>`;
-      }).join('');
+      // First two columns are the student's matched name and code — same
+      // two columns stay pinned ("frozen") while the rest of the table
+      // scrolls horizontally. Column headers are plain spreadsheet letters
+      // (A, B, C…, see app.py's preview_output) and every row shown here is
+      // genuine file content, so this reads exactly like opening the actual
+      // downloaded file in Excel — no extra computed row on top of it.
+      const scOpts = { requiredIndexes: PREVIEW_SCANTRON_REQUIRED_INDEXES, requiredIndexesFromRow: 3, stickyCount: 2 };
+      const { colgroup, theadCells, bodyRows, totalWidth } = previewEditableCells(data.columns, data.preview, scItemColWidth, scOpts);
       const flaggedBadge = previewFlaggedBadge(data.columns, data.preview, scOpts);
       const badgeRow = flaggedBadge ? `<div class="badge-row">${flaggedBadge}</div>` : '';
-      slot.innerHTML = `${badgeRow}${previewZoomControls()}<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr class="item-no-row">${itemNoCells}</tr><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
+      slot.innerHTML = `${badgeRow}${previewZoomControls()}<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
     } catch (e) {
       slot.innerHTML = `<div class="err-msg"><i class="bi bi-x-circle-fill"></i> Unexpected error: ${pdfEscapeHtml(e.message)}</div>`;
     }

@@ -157,7 +157,7 @@ def run_processing(base_dir=None):
             key = _question_file_key(qf)
             questions = pd.read_excel(qf, dtype=str)
             fmt = questions["Question"].to_list()
-            fmt.insert(0, "Best Match")
+            fmt.insert(0, "studentno")
             fmt.append("")
             questions_df[key] = fmt
             choice_sets_df[key] = _question_choice_sets(questions)
@@ -284,23 +284,49 @@ def run_processing(base_dir=None):
 
             if qkey in questions_df:
                 questions_status = '— questions included'
-                question_headers = questions_df[qkey]
-                if len(question_headers) <= max_colno:
-                    while len(question_headers) < max_colno:
-                        question_headers.append("")
+                # A copy — questions_df[qkey] is shared across every answer
+                # folder that matches this question file, so padding it in
+                # place here would leak into the next folder's own row.
+                header_row = list(questions_df[qkey])
+                if len(header_row) <= max_colno:
+                    while len(header_row) < max_colno:
+                        header_row.append("")
                 else:
-                    while len(question_headers) > final_df.shape[1]:
+                    while len(header_row) > final_df.shape[1]:
                         final_df[final_df.shape[1]] = np.nan
-                final_df.columns = question_headers
+                    max_colno = final_df.shape[1]
+            else:
+                header_row = ["studentno"] + [""] * max(max_colno - 1, 0)
 
-            out_file = os.path.join(output_folder, folder_name + ".xlsx")
-            final_df.to_excel(out_file, index=True)
+            # The stored file always keeps the Fullname column (final_df's
+            # own index) — it's the "master" copy. Dropping it is a
+            # download-time-only option now (see app.py's /download route),
+            # so re-downloading later with the box unchecked still has it.
+            width = max_colno + 1
+            blank_row = [""] * width
+            correct_row = [""] * width
+            correct_row[1] = "CORRECT ANSWER"
+            header_full_row = [""] + header_row
+
+            answer_file = os.path.join(output_folder, folder_name + "_student_answer.xlsx")
+            with pd.ExcelWriter(answer_file, engine="openpyxl") as writer:
+                pd.DataFrame([blank_row, correct_row, header_full_row]).to_excel(
+                    writer, index=False, header=False, sheet_name="Sheet1")
+                final_df.to_excel(writer, index=True, header=False, sheet_name="Sheet1", startrow=3)
+
+            # A second, minimal file — just the studentno column, one row
+            # per student in the same order — for whoever only needs a
+            # plain list of who took this exam, e.g. an attendance check.
+            number_file = os.path.join(output_folder, folder_name + "_student_number.xlsx")
+            final_df.iloc[:, [0]].reset_index(drop=True).rename(columns={0: "studentno"}).to_excel(
+                number_file, index=False)
+
             msg = f'{folder_name} {questions_status}'
             if file_errors:
                 msg += f' | skipped {len(file_errors)} file(s): ' + '; '.join(file_errors)
             results.append({'folder': folder_name, 'status': 'success',
                             'message': msg,
-                            'output': folder_name + '.xlsx'})
+                            'output': folder_name + '_student_answer.xlsx'})
 
         except Exception as e:
             exc_type, exc_obj, tb = sys.exc_info()

@@ -151,6 +151,14 @@ def index():
                            active_tab=active_tab, **get_state())
 
 
+# ── PDF Editor ────────────────────────────────────────────────────────────────
+# Everything happens client-side (static/pdf_editor/); this route only serves the page.
+@app.route('/pdf-editor')
+def pdf_editor():
+    # ?embed=1 when shown inside the "Edit PDF" tab: hide the editor's own header.
+    return render_template('pdf_editor.html', embed=request.args.get('embed') == '1')
+
+
 # ── Scantron Reader routes ────────────────────────────────────────────────────
 @app.route('/upload/students', methods=['POST'])
 def upload_students():
@@ -243,9 +251,43 @@ def process():
 @app.route('/download/<filename>')
 def download(filename):
     fp = os.path.join(CONVERTED_DIR, filename)
-    if os.path.isfile(fp):
-        return send_file(fp, as_attachment=True, download_name=filename)
-    return 'File not found', 404
+    if not os.path.isfile(fp):
+        return 'File not found', 404
+
+    # Dropping the Fullname column ("it's only there for checking") is a
+    # download-time-only transform — the stored file on disk always keeps
+    # it, so re-downloading later without this flag still has it.
+    if request.args.get('exclude_fullname') == '1' and filename.endswith('_student_answer.xlsx'):
+        import pandas as pd
+        try:
+            raw = pd.read_excel(fp, engine='openpyxl', dtype=str, header=None).fillna('')
+            if raw.shape[1] > 1:
+                raw = raw.drop(columns=[raw.columns[0]])
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+                raw.to_excel(writer, index=False, header=False, sheet_name='Sheet1')
+            buf.seek(0)
+            return send_file(
+                buf, as_attachment=True, download_name=filename,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            )
+        except Exception as e:
+            return str(e), 500
+
+    return send_file(fp, as_attachment=True, download_name=filename)
+
+
+def _xl_col_letter(n: int) -> str:
+    """1 -> 'A', 2 -> 'B', ..., 27 -> 'AA' — plain spreadsheet column
+    labels, matching what opening the file directly in Excel shows, since
+    a converted scantron output has no real header row of its own (see
+    ans_reader.py: every row, including the blank/"CORRECT ANSWER"/
+    "studentno" rows, is just plain data)."""
+    s = ''
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        s = chr(65 + rem) + s
+    return s
 
 
 @app.route('/preview/<filename>')
@@ -257,11 +299,17 @@ def preview_output(filename):
     try:
         # dtype=str avoids pandas silently upcasting a numeric column with
         # blanks to float64 (which would redisplay an edited "5" as "5.0").
-        df = pd.read_excel(fp, engine='openpyxl', dtype=str).fillna('')
+        # header=None: every row (including one that reads like a header,
+        # e.g. "studentno") is shown exactly as it is in the file, so the
+        # preview never disagrees with what downloading and opening it in
+        # Excel actually shows.
+        df = pd.read_excel(fp, engine='openpyxl', dtype=str, header=None).fillna('')
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+    columns = [_xl_col_letter(i + 1) for i in range(df.shape[1])]
     return jsonify({
-        'columns': [str(c) for c in df.columns],
+        'columns': columns,
         'preview': df.values.tolist(),
         'total': len(df),
     })
@@ -274,7 +322,10 @@ def update_output(filename):
         return jsonify({'error': 'File not found.'}), 404
     try:
         df = _grid_to_dataframe(request.get_json(silent=True) or {})
-        df.to_excel(fp, index=False)
+        # header=False: every row shown in the preview is genuine file
+        # content (see preview_output above) — there's no separate header
+        # to reconstruct, so what's sent back is written verbatim.
+        df.to_excel(fp, index=False, header=False)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
