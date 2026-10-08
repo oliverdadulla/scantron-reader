@@ -5,7 +5,10 @@ from typing import Optional
 _PATTERNS = [
     (re.compile(r"-D\d+-CO\d+(\.\d+)*[a-zA-Z]*$"),       "Competency"),
     (re.compile(r"-D\d+-ILO\d+(\.\d+)*[a-zA-Z]*$"),      "Content Standards"),
-    (re.compile(r"-TS-[A-Z]+(\.\d+)*$"),                  "THINKING SKILLS"),
+    # Letters case-insensitive: most Thinking-Skill codes are all-caps (RE, AN,
+    # EV...) but a couple of the combined categories are generated mixed-case
+    # (e.g. "Cr" for Creating, "Ave" for Applying/Analyzing) — see excelreader.py.
+    (re.compile(r"-TS-[A-Za-z]+(\.\d+)*$"),                "THINKING SKILLS"),
     (re.compile(r"-D\d+(\.\d+)*$"),                       "TOPIC"),
 ]
 

@@ -63,7 +63,7 @@ def load_answers(path: str):
     """
     Reads a correct answer file where:
       Column 1 → ItemNos  (question numbers)
-      Column 2 → Key Answer (A, B, C, or D)
+      Column 2 → Key Answer (A, B, C, D, or E)
 
     Column headers are ignored — position is what matters.
     """

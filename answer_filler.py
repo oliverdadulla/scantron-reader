@@ -4,7 +4,7 @@ import pandas as pd
 
 from expander import expand_item_nos
 
-ANSWER_TO_IDX = {"A": 0, "B": 1, "C": 2, "D": 3}
+ANSWER_TO_IDX = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
 
 
 def detect_iscorrect_cols(df: pd.DataFrame) -> list:
@@ -25,7 +25,9 @@ def detect_iscorrect_cols(df: pd.DataFrame) -> list:
         print("   ⚠️  No iscorrect columns found in the exam template — skipping answer fill.")
         return []
 
-    missing = [i for i in range(1, 5) if i not in found]
+    # Gaps within whatever range of positions actually showed up (a 4-choice
+    # template has no column 5 to begin with, so that's not "missing").
+    missing = [i for i in range(1, max(found.keys()) + 1) if i not in found]
     if missing:
         print(f"   ⚠️  Could not find iscorrect columns for positions: {missing}")
 
@@ -55,6 +57,7 @@ def apply_answers(main_df: pd.DataFrame, lookup: dict) -> pd.DataFrame:
         main_df[col] = 0
 
     unmatched = []
+    out_of_range = []
     for idx, row in main_df.iterrows():
         raw_qno = str(row["Question No."]).strip().lstrip("Qq")
         try:
@@ -68,14 +71,24 @@ def apply_answers(main_df: pd.DataFrame, lookup: dict) -> pd.DataFrame:
                 main_df.at[idx, col] = 0
             if answer_idx < len(iscorrect_cols):
                 main_df.at[idx, iscorrect_cols[answer_idx]] = 1
+            else:
+                # e.g. the correct answer is "E" but this template only has 4 choice columns.
+                out_of_range.append(qno)
         else:
             unmatched.append(qno)
 
     if unmatched:
         print(f"   ⚠️  No answer found for Question No.: {sorted(unmatched)}")
-    else:
+    if out_of_range:
+        print(f"   ⚠️  Correct answer has no matching choice column for Question No.: {sorted(out_of_range)}")
+    if not unmatched and not out_of_range:
         detected = ", ".join(iscorrect_cols)
+        mapping = " / ".join(
+            f"{letter}→{','.join('1' if i == idx else '0' for i in range(len(iscorrect_cols)))}"
+            for letter, idx in sorted(ANSWER_TO_IDX.items(), key=lambda kv: kv[1])
+            if idx < len(iscorrect_cols)
+        )
         print(f"   ✅ Answers applied → columns: {detected}")
-        print(f"      (A→1,0,0,0 / B→0,1,0,0 / C→0,0,1,0 / D→0,0,0,1)")
+        print(f"      ({mapping})")
 
     return main_df
