@@ -3,7 +3,7 @@ from typing import List, Optional
 
 import pandas as pd
 
-from config import OUTPUT_COLUMN_ORDER
+from .config import OUTPUT_COLUMN_ORDER
 
 
 def _whole_numbers_as_int(value):

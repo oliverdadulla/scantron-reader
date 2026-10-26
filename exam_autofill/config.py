@@ -1,8 +1,3 @@
-MAIN_DIR = "data/exam template"
-MAPPING_DIR = "data/tags"
-ANSWERS_DIR = "data/correct answer"
-OUTPUT_DIR = "output"
-
 EXAM_TEMPLATE_SUFFIX = "_exam_template"
 TAGS_SUFFIX = "_tags"
 CORRECT_ANSWER_SUFFIX = "_co-analysis"

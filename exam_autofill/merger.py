@@ -2,9 +2,9 @@ from typing import Tuple
 
 import pandas as pd
 
-from classifier import classify_code
-from config import FILLABLE_COLUMNS
-from expander import expand_item_nos
+from .classifier import classify_code
+from .config import FILLABLE_COLUMNS
+from .expander import expand_item_nos
 
 
 def build_lookup(mapping_df: pd.DataFrame) -> dict:

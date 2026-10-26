@@ -32,11 +32,11 @@ AUTOFILL_TEMP_BASE = Path(BASE_DIR) / 'temp_sessions'
 AUTOFILL_TEMP_BASE.mkdir(parents=True, exist_ok=True)
 SESSION_TTL = 2 * 60 * 60  # 2 hours
 
-from config import COMPLETED_SUFFIX, CORRECT_ANSWER_SUFFIX, EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX
-from answer_filler import apply_answers, build_answer_lookup
-from loader import load_answers, load_main, load_mapping
-from merger import apply_lookup, build_lookup
-from writer import write_output, prepare_filled_df
+from exam_autofill.config import COMPLETED_SUFFIX, CORRECT_ANSWER_SUFFIX, EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX
+from exam_autofill.answer_filler import apply_answers, build_answer_lookup
+from exam_autofill.loader import load_answers, load_main, load_mapping
+from exam_autofill.merger import apply_lookup, build_lookup
+from exam_autofill.writer import write_output, prepare_filled_df
 
 ALL_SUFFIXES = (EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX, CORRECT_ANSWER_SUFFIX)
 
@@ -143,20 +143,45 @@ def build_autofill_stems(directory: Path) -> dict:
     return result
 
 
+def build_tags_lookup(directory: Path) -> dict:
+    """base -> (file_path, sheet_name) for every uploaded tags workbook.
+
+    Supports both styles: a traditional one-file-per-exam tags sheet (matched
+    by its filename's base, same as exam/answer files), and a single combined
+    workbook with one sheet per exam/course (matched by each sheet's own
+    name) — e.g. the output of the "CO Analysis → Tags" tab, which produces
+    exactly that shape. A file is treated as "combined" the moment it has
+    more than one sheet.
+    """
+    import pandas as pd
+    result = {}
+    for f in list_autofill_xlsx(directory):
+        try:
+            sheet_names = pd.ExcelFile(f, engine='openpyxl').sheet_names
+        except Exception:
+            sheet_names = []
+
+        if len(sheet_names) > 1:
+            for sheet in sheet_names:
+                base = sheet.strip()
+                if base and base not in result:
+                    result[base] = (f, sheet)
+        else:
+            # Single-sheet file: read whichever sheet it has (index 0) rather
+            # than naming it — this is the "matched by filename" style, so
+            # the sheet's own name isn't meaningful to show anywhere.
+            base = extract_base(f.name)
+            if base not in result:
+                result[base] = (f, 0)
+    return result
+
+
 # ── Main route ────────────────────────────────────────────────────────────────
 @app.route('/')
 def index():
     active_tab = request.args.get('tab', 'scantron')
     return render_template('index.html', process_results=None,
                            active_tab=active_tab, **get_state())
-
-
-# ── PDF Editor ────────────────────────────────────────────────────────────────
-# Everything happens client-side (static/pdf_editor/); this route only serves the page.
-@app.route('/pdf-editor')
-def pdf_editor():
-    # ?embed=1 when shown inside the "Edit PDF" tab: hide the editor's own header.
-    return render_template('pdf_editor.html', embed=request.args.get('embed') == '1')
 
 
 # ── Scantron Reader routes ────────────────────────────────────────────────────
@@ -242,7 +267,7 @@ def delete_output(filename):
 
 @app.route('/process', methods=['POST'])
 def process():
-    from ans_reader import run_processing
+    from scantron.reader import run_processing
     results = run_processing(BASE_DIR)
     return render_template('index.html', process_results=results,
                            active_tab='scantron', **get_state())
@@ -281,7 +306,7 @@ def _xl_col_letter(n: int) -> str:
     """1 -> 'A', 2 -> 'B', ..., 27 -> 'AA' — plain spreadsheet column
     labels, matching what opening the file directly in Excel shows, since
     a converted scantron output has no real header row of its own (see
-    ans_reader.py: every row, including the blank/"CORRECT ANSWER"/
+    scantron/reader.py: every row, including the blank/"CORRECT ANSWER"/
     "studentno" rows, is just plain data)."""
     s = ''
     while n > 0:
@@ -387,7 +412,7 @@ def autofill_process():
     if not exam_stems:
         return jsonify({'error': 'No exam template files uploaded.'}), 400
 
-    tags_stems   = build_autofill_stems(tags_dir)
+    tags_stems   = build_tags_lookup(tags_dir)
     answer_stems = build_autofill_stems(answer_dir)
 
     results = []
@@ -409,9 +434,10 @@ def autofill_process():
                 item['warnings'].append('No correct answer file — iscorrect columns unchanged')
 
             if base in tags_stems:
-                tags_df = load_mapping(str(tags_stems[base]))
+                tags_path, tags_sheet = tags_stems[base]
+                tags_df = load_mapping(str(tags_path), sheet_name=tags_sheet)
                 main_df, unmatched = apply_lookup(main_df, build_lookup(tags_df))
-                item['tags'] = tags_stems[base].name
+                item['tags'] = tags_path.name if tags_sheet in (0, None) else f'{tags_path.name} → {tags_sheet}'
                 if unmatched:
                     item['warnings'].append(f'No TOPIC match for Question No.: {sorted(unmatched)}')
             else:
@@ -492,9 +518,9 @@ def autofill_clear():
 
 
 # ── PDF to Excel routes ───────────────────────────────────────────────────────
-from pdf_extractor import extract_text as pdf_extract_text, detect_layout as pdf_detect_layout
-from pdf_parser    import parse_questions
-from pdf_writer    import build_dataframe as pdf_build_dataframe, write_dataframe as pdf_write_dataframe
+from pdf_to_excel.extractor import extract_text as pdf_extract_text, detect_layout as pdf_detect_layout
+from pdf_to_excel.parser    import parse_questions
+from pdf_to_excel.writer    import build_dataframe as pdf_build_dataframe, write_dataframe as pdf_write_dataframe
 
 QUESTIONNAIRE_EXTS = ('.pdf',)
 
@@ -656,6 +682,132 @@ def pdf_download_all():
 def pdf_clear():
     shutil.rmtree(get_pdf_session_dir(), ignore_errors=True)
     session.pop('pdf_sid', None)
+    return jsonify({'ok': True})
+
+
+# ── CO Analysis → Tags routes ─────────────────────────────────────────────────
+from tags.builder import (
+    get_sheet_names as tags_get_sheet_names, build_tags, write_tags, DEFAULT_TAG_PREFIX,
+    tags_filename_for_sheet, write_single_sheet_tags,
+    extract_correct_answers, co_analysis_filename_for_sheet, write_single_sheet_co_analysis,
+)
+
+
+def get_tags_session_dir() -> Path:
+    if 'tags_sid' not in session:
+        session['tags_sid'] = str(uuid.uuid4())
+    d = AUTOFILL_TEMP_BASE / ('tags_' + session['tags_sid'])
+    d.mkdir(exist_ok=True)
+    return d
+
+
+@app.route('/tags/upload', methods=['POST'])
+def tags_upload():
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify({'error': 'No file provided'}), 400
+    if not f.filename.lower().endswith('.xlsx'):
+        return jsonify({'error': 'Please upload the CO Analysis file as an .xlsx workbook.'}), 400
+
+    session_dir = get_tags_session_dir()
+    input_dir = session_dir / 'input'
+    input_dir.mkdir(exist_ok=True)
+    # A fresh upload replaces whatever was there before — only one CO Analysis
+    # file is in play per session.
+    shutil.rmtree(input_dir, ignore_errors=True)
+    input_dir.mkdir(exist_ok=True)
+
+    name = Path(f.filename).name
+    path = input_dir / name
+    f.save(path)
+
+    try:
+        sheets = tags_get_sheet_names(path)
+    except Exception as e:
+        shutil.rmtree(input_dir, ignore_errors=True)
+        return jsonify({'error': f"Could not read that workbook's sheets: {e}"}), 400
+
+    return jsonify({'filename': name, 'sheets': sheets, 'default_tag_prefix': DEFAULT_TAG_PREFIX})
+
+
+@app.route('/tags/process', methods=['POST'])
+def tags_process():
+    data = request.get_json(silent=True) or {}
+    filename = data.get('filename')
+    sheets = data.get('sheets') or []
+    tag_prefix = (data.get('tag_prefix') or '').strip() or DEFAULT_TAG_PREFIX
+
+    if not filename:
+        return jsonify({'error': 'No uploaded file to process — please upload a CO Analysis file first.'}), 400
+    if not sheets:
+        return jsonify({'error': 'Select at least one sheet to convert.'}), 400
+
+    session_dir = get_tags_session_dir()
+    input_path = session_dir / 'input' / Path(filename).name
+    if not input_path.exists():
+        return jsonify({'error': 'That uploaded file is no longer available — please upload it again.'}), 400
+
+    output_dir = session_dir / 'output'
+    output_dir.mkdir(exist_ok=True)
+
+    try:
+        grand_output_df = build_tags(str(input_path), sheets, tag_prefix)
+    except Exception as e:
+        return jsonify({'error': f'Could not process that workbook: {e}'}), 500
+
+    out_name = f'output-{input_path.stem}.xlsx'
+    write_tags(grand_output_df, output_dir / out_name)
+
+    results = []
+    for sheet_name, df in grand_output_df.items():
+        # A small per-sheet file too — just code/ItemNos, named to match what
+        # Exam Autofill's Tags upload already expects for a single exam
+        # (<base>_tags.xlsx) — for sharing just one course's tags.
+        tags_file = tags_filename_for_sheet(sheet_name)
+        write_single_sheet_tags(df, output_dir / tags_file)
+
+        # Column E ("Correct Answer") is its own, separately downloadable
+        # view — a flat ItemNos/answer-letter list, matching what Exam
+        # Autofill's Correct Answer upload expects (<base>_co-analysis.xlsx).
+        try:
+            co_df = extract_correct_answers(str(input_path), sheet_name)
+        except Exception:
+            co_df = None
+        co_file = None
+        co_columns, co_preview = [], []
+        if co_df is not None and len(co_df):
+            co_file = co_analysis_filename_for_sheet(sheet_name)
+            write_single_sheet_co_analysis(co_df, output_dir / co_file)
+            co_columns = [str(c) for c in co_df.columns]
+            co_preview = co_df.fillna('').astype(str).values.tolist()
+
+        results.append({
+            'sheet': sheet_name,
+            'tagCount': len(df),
+            'columns': [str(c) for c in df.columns],
+            'preview': df.fillna('').astype(str).values.tolist(),
+            'tagsFile': tags_file,
+            'coAnalysisFile': co_file,
+            'coAnalysisColumns': co_columns,
+            'coAnalysisPreview': co_preview,
+        })
+
+    return jsonify({'output': out_name, 'results': results})
+
+
+@app.route('/tags/download/<filename>')
+def tags_download(filename):
+    path = get_tags_session_dir() / 'output' / Path(filename).name
+    if not path.exists():
+        return 'File not found', 404
+    return send_file(str(path), as_attachment=True, download_name=path.name,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@app.route('/tags/clear', methods=['POST'])
+def tags_clear():
+    shutil.rmtree(get_tags_session_dir(), ignore_errors=True)
+    session.pop('tags_sid', None)
     return jsonify({'ok': True})
 
 

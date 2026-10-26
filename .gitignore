@@ -2,6 +2,7 @@ Students/
 Answers/
 Questions/
 Converted/
+temp_sessions/
 __pycache__/
 *.pyc
 *.pyo

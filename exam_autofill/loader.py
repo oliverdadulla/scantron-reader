@@ -2,7 +2,7 @@ from typing import Optional, Tuple
 
 import pandas as pd
 
-from config import DATA_SHEET_INDEX, TEMPLATE_SHEET_INDEX
+from .config import DATA_SHEET_INDEX, TEMPLATE_SHEET_INDEX
 
 
 def load_main(path: str) -> Tuple[Optional[pd.DataFrame], pd.DataFrame, list]:
@@ -85,9 +85,9 @@ def load_answers(path: str):
     return normalized, "Answer"
 
 
-def load_mapping(path: str) -> pd.DataFrame:
+def load_mapping(path: str, sheet_name=0) -> pd.DataFrame:
     try:
-        df = pd.read_excel(path, engine="openpyxl")
+        df = pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl")
     except FileNotFoundError:
         raise FileNotFoundError(f"Mapping file not found: '{path}'")
 

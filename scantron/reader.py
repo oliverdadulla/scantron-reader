@@ -7,7 +7,10 @@ import sys
 import io
 import zipfile
 
-from config import COMPLETED_SUFFIX, CORRECT_ANSWER_SUFFIX, EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX
+# Borrowed from the Exam Autofill feature: this is the one place the two
+# features' filenames overlap (a file from that stage, re-uploaded here,
+# should still be recognized), not a sign the two belong in one package.
+from exam_autofill.config import COMPLETED_SUFFIX, CORRECT_ANSWER_SUFFIX, EXAM_TEMPLATE_SUFFIX, TAGS_SUFFIX
 
 # A Question File is usually just uploaded straight from an earlier stage's
 # output (e.g. the "_completed" file from Prepare Exam Template) rather than

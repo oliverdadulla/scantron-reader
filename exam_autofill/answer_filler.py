@@ -2,7 +2,7 @@ import re
 
 import pandas as pd
 
-from expander import expand_item_nos
+from .expander import expand_item_nos
 
 ANSWER_TO_IDX = {"A": 0, "B": 1, "C": 2, "D": 3, "E": 4}
 

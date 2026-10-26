@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import pdfplumber
-from pdf_config import TWO_COLUMN_CHAR_THRESHOLD
+from .config import TWO_COLUMN_CHAR_THRESHOLD
 
 
 def extract_text(pdf_path: Path, mode: str = "auto") -> str:

@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import pandas as pd
-from pdf_config import COLUMN_ORDER, BLANK_COLUMNS
+from .config import COLUMN_ORDER, BLANK_COLUMNS
 
 
 def build_dataframe(questions: list[dict]) -> pd.DataFrame:

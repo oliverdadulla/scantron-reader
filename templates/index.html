@@ -97,8 +97,6 @@
       border-color: rgba(255,255,255,.18);
     }
 
-    /* ── Edit PDF tab: editor fills the space under the header ── */
-    .pdf-editor-frame { display: block; width: 100%; height: calc(100dvh - 64px); border: 0; }
 
     /* ── Page ── */
     .page { max-width: 1160px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem; }
@@ -148,6 +146,7 @@
     .card.purple { --accent: #8b5cf6; --accent-bg: #f5f3ff; }
     .card.green  { --accent: #10b981; --accent-bg: #ecfdf5; }
     .card.rose   { --accent: #f43f5e; --accent-bg: #fff1f2; }
+    .card.teal   { --accent: #0d9488; --accent-bg: #f0fdfa; }
     .card.amber  { --accent: #f59e0b; --accent-bg: #fffbeb; }
     .card.sky    { --accent: #0ea5e9; --accent-bg: #f0f9ff; }
 
@@ -291,6 +290,35 @@
     /* ── Results section — shared by both tabs ── */
     .results-section { margin-top: 1.5rem; }
     .results-section.hidden { display: none; }
+    .card.hidden { display: none; }
+
+    /* ── CO Analysis → Tags sheet picker ── */
+    .tags-sheet-actions { display: flex; gap: .5rem; }
+    .tags-mini-btn {
+      font: inherit; font-size: .75rem; font-weight: 600; cursor: pointer;
+      padding: .28rem .8rem; border-radius: 6px;
+      border: 1.5px solid var(--accent); color: var(--accent); background: white;
+    }
+    .tags-mini-btn:hover { background: var(--accent); color: white; }
+    .tags-sheet-list { display: flex; flex-direction: column; gap: .4rem; max-height: 260px; overflow-y: auto; }
+    .tags-sheet-row {
+      display: flex; align-items: center; gap: .5rem; font-size: .82rem; color: #334155;
+      padding: .45rem .6rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;
+    }
+    .tags-sheet-row input[type=checkbox] { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+    .tags-prefix-label {
+      display: block; margin-top: .3rem; font-size: .78rem; font-weight: 600; color: #475569;
+    }
+    .tags-prefix-label input { width: 100%; margin-top: .35rem; }
+    .tag-code-cell { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; font-size: .74rem; white-space: nowrap; }
+    .tags-view-toggle { display: flex; gap: .4rem; margin: .2rem 0 .6rem; }
+    .tags-view-btn {
+      font: inherit; font-size: .76rem; font-weight: 600; cursor: pointer;
+      padding: .3rem .85rem; border-radius: 999px; border: 1.5px solid #e2e8f0;
+      background: #f8fafc; color: #475569;
+    }
+    .tags-view-btn.active { background: var(--accent, #0d9488); border-color: var(--accent, #0d9488); color: #fff; }
+    .tags-view-pane.hidden { display: none; }
     .results-header {
       display: flex; align-items: center; justify-content: space-between;
       margin-bottom: 1rem;
@@ -621,14 +649,14 @@
     <button class="tab-btn pdf" data-tab="pdf" onclick="switchTab('pdf')">
       Convert Questionnaire
     </button>
+    <button class="tab-btn tags" data-tab="tags" onclick="switchTab('tags')">
+      CO Analysis → Tags
+    </button>
     <button class="tab-btn autofill" data-tab="autofill" onclick="switchTab('autofill')">
       Prepare Exam Template
     </button>
     <button class="tab-btn scantron" data-tab="scantron" onclick="switchTab('scantron')">
       Convert Student Answer
-    </button>
-    <button class="tab-btn pdfedit" data-tab="pdfedit" onclick="switchTab('pdfedit')">
-      Edit PDF
     </button>
   </nav>
 </header>
@@ -928,9 +956,12 @@
              onchange="afHandle('tags', this.files); this.value=''">
       <div class="file-list" id="fl-tags"><div class="empty-note">No files uploaded</div></div>
       <div class="naming-hint">
-        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Filename example</strong>
-        <code>PHCHEM222-LEC_tags.xlsx</code><br>
-        Base name must match exam template. Suffix: <code>_tags</code><br>
+        <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i> Two ways to match tags to an exam</strong>
+        One file per exam — filename example <code>PHCHEM222-LEC_tags.xlsx</code>
+        (base name must match the exam template, suffix <code>_tags</code>)<br>
+        <em>or</em> one combined workbook with a sheet per exam/course — each
+        sheet's own name is matched against the exam template's base name
+        (this is exactly what the "CO Analysis → Tags" tab produces).<br>
         <button type="button" class="preview-link" onclick="showFormatPreview('tags')">
           <i class="bi bi-table"></i> Preview required columns
         </button>
@@ -1054,13 +1085,70 @@
 
 
 <!-- ══════════════════════════════════════════════
-     TAB 4 — EDIT PDF
-     The editor runs entirely in the browser; it lives in its own page
-     (/pdf-editor) and is framed here so its styles can't clash with this one.
+     TAB — CO ANALYSIS → TAGS
 ══════════════════════════════════════════════ -->
-<div id="tab-pdfedit" class="tab-section" style="display:none">
-  <iframe id="pdf-editor-frame" class="pdf-editor-frame" title="PDF Editor" data-src="{{ url_for('pdf_editor', embed=1) }}"></iframe>
-</div><!-- /tab-pdfedit -->
+<div id="tab-tags" class="tab-section" style="display:none">
+<div class="page">
+
+  <div class="section-label">① Upload the CO Analysis file</div>
+
+  <div class="card teal" style="max-width:640px;margin:0 auto">
+    <div class="card-head">
+      <div class="card-title"><div class="card-icon"><i class="bi bi-tags-fill"></i></div> CO Analysis File</div>
+    </div>
+    <div class="drop-zone" id="dz-cotags" onclick="document.getElementById('inp-cotags').click()">
+      <span class="dz-icon"><i class="bi bi-cloud-upload"></i></span>
+      <p>Drag &amp; drop the CO Analysis .xlsx file here</p>
+      <span class="browse-btn">Browse files</span>
+    </div>
+    <input type="file" id="inp-cotags" accept=".xlsx" style="display:none"
+           onchange="tagsHandle(this.files); this.value=''">
+    <div class="file-list" id="fl-cotags"><div class="empty-note">No file uploaded</div></div>
+  </div>
+
+  <div class="card teal hidden" id="tags-sheet-card" style="max-width:640px;margin:1rem auto 0">
+    <div class="card-head">
+      <div class="card-title"><div class="card-icon"><i class="bi bi-list-check"></i></div> Choose sheets to convert</div>
+    </div>
+    <div class="naming-hint">
+      <strong><i class="bi bi-info-circle-fill" style="color:var(--accent)"></i></strong>
+      Each sheet should be laid out like a CO Analysis: row 9 is the first item row, with
+      Item No. / Module No. / Module Title / Cognitive Level in columns A–D and
+      ILO-CO No. / Coverage Focus in columns F–G.
+    </div>
+    <div class="tags-sheet-actions">
+      <button type="button" class="tags-mini-btn" onclick="tagsSelectAllSheets(true)">Select all</button>
+      <button type="button" class="tags-mini-btn" onclick="tagsSelectAllSheets(false)">Clear all</button>
+    </div>
+    <div id="tags-sheet-list" class="tags-sheet-list"></div>
+    <label class="tags-prefix-label">
+      Tag prefix
+      <input type="text" id="tags-prefix-input" class="layout-select" placeholder="26/27-Prelims-">
+    </label>
+  </div>
+
+  <div class="process-wrap">
+    <button class="process-btn" id="tags-process-btn" onclick="tagsProcess()" disabled>
+      <div class="btn-spinner"></div>
+      <span class="btn-label" id="tags-btn-label"><i class="bi bi-lightning-charge-fill"></i> Convert to Tags</span>
+    </button>
+  </div>
+
+  <div class="results-section hidden" id="tags-results-section">
+    <div class="results-header">
+      <div class="section-label" style="margin:0">② Preview &amp; Download</div>
+      <a class="dl-all-btn" id="tags-download-link" href="#">
+        <i class="bi bi-download"></i> Download Tags (.xlsx)
+      </a>
+    </div>
+    <div id="tags-results-list"></div>
+  </div>
+
+  <div class="reset-wrap">
+    <button class="reset-btn" onclick="tagsReset()"><i class="bi bi-trash"></i> Clear everything and start over</button>
+  </div>
+
+</div></div><!-- /tab-tags -->
 
 
 <script>
@@ -1073,9 +1161,6 @@ function switchTab(tab) {
     b.classList.toggle('active', b.dataset.tab === tab)
   );
   localStorage.setItem('activeTab', tab);
-  // Load the editor only the first time its tab is opened.
-  const frame = document.getElementById('pdf-editor-frame');
-  if (tab === 'pdfedit' && !frame.getAttribute('src')) frame.src = frame.dataset.src;
 }
 window.addEventListener('DOMContentLoaded', () => {
   const serverTab = "{{ active_tab }}";
@@ -2190,6 +2275,184 @@ async function pdfReset() {
   Object.keys(pdfChoiceCounts).forEach(k => delete pdfChoiceCounts[k]);
   pdfRenderList(); pdfSyncBtn();
   document.getElementById('pdf-results-section').classList.add('hidden');
+}
+
+// ── CO Analysis → Tags ──────────────────────────────────────────────────────
+let tagsFilename = null;
+let tagsSheets = [];
+const tagsSelectedSheets = new Set();
+
+function tagsSyncBtn() {
+  document.getElementById('tags-process-btn').disabled = tagsSelectedSheets.size === 0;
+}
+
+function tagsRenderFileList() {
+  const el = document.getElementById('fl-cotags');
+  if (!tagsFilename) { el.innerHTML = '<div class="empty-note">No file uploaded</div>'; return; }
+  el.innerHTML = `<div class="file-item">
+    <div class="file-info"><div class="file-name" title="${pdfEscapeAttr(tagsFilename)}"><i class="bi bi-file-earmark-excel-fill"></i> ${pdfEscapeHtml(tagsFilename)}</div></div>
+    <button class="icon-btn" onclick="tagsClearAll()" title="Remove">✕</button>
+  </div>`;
+}
+
+function tagsRenderSheetList() {
+  const el = document.getElementById('tags-sheet-list');
+  el.innerHTML = tagsSheets.map(s => {
+    const enc = pdfEscapeAttr(s);
+    const checked = tagsSelectedSheets.has(s) ? 'checked' : '';
+    return `<label class="tags-sheet-row">
+      <input type="checkbox" value="${enc}" ${checked} onchange="tagsToggleSheet('${enc}', this.checked)">
+      ${pdfEscapeHtml(s)}
+    </label>`;
+  }).join('');
+}
+
+function tagsToggleSheet(sheet, checked) {
+  if (checked) tagsSelectedSheets.add(sheet);
+  else tagsSelectedSheets.delete(sheet);
+  tagsSyncBtn();
+}
+
+function tagsSelectAllSheets(select) {
+  tagsSelectedSheets.clear();
+  if (select) tagsSheets.forEach(s => tagsSelectedSheets.add(s));
+  tagsRenderSheetList();
+  tagsSyncBtn();
+}
+
+async function tagsHandle(files) {
+  const file = files && files[0];
+  if (!file || !/\.xlsx$/i.test(file.name)) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  const data = await fetch('/tags/upload', { method: 'POST', body: fd }).then(r => r.json());
+  if (data.error) { alert('Error: ' + data.error); return; }
+
+  tagsFilename = data.filename;
+  tagsSheets = data.sheets || [];
+  tagsSelectedSheets.clear();
+  tagsSheets.forEach(s => tagsSelectedSheets.add(s)); // default: every sheet selected
+
+  tagsRenderFileList();
+  tagsRenderSheetList();
+  document.getElementById('tags-sheet-card').classList.remove('hidden');
+  const prefixInput = document.getElementById('tags-prefix-input');
+  if (!prefixInput.value) prefixInput.value = data.default_tag_prefix || '';
+  tagsSyncBtn();
+}
+
+const dzCotags = document.getElementById('dz-cotags');
+if (dzCotags) {
+  dzCotags.addEventListener('dragover',  e => { e.preventDefault(); dzCotags.classList.add('drag-over'); });
+  dzCotags.addEventListener('dragleave', () => dzCotags.classList.remove('drag-over'));
+  dzCotags.addEventListener('drop', e => { e.preventDefault(); dzCotags.classList.remove('drag-over'); tagsHandle(e.dataTransfer.files); });
+}
+
+function tagsBuildPreviewTable(columns, rows, widths) {
+  // A plain, non-editable table — unlike the other tabs' preview grids, there's
+  // no /tags/update endpoint behind this one, so cells here stay read-only
+  // rather than *look* editable without actually saving (that mismatch
+  // between what you see and what you download is exactly what bit this
+  // app's other previews before they got a real save path).
+  widths = widths || columns.map(() => 200);
+  const totalWidth = widths.reduce((a, b) => a + b, 0);
+  const colgroup = widths.map(w => `<col style="width:${w}px">`).join('');
+  const theadCells = columns.map(c => `<th><div class="th-inner">${pdfEscapeHtml(c)}</div></th>`).join('');
+  const bodyRows = rows.map(row => `<tr>${row.map((v, i) =>
+    `<td class="${i === 0 ? 'tag-code-cell' : ''}">${pdfEscapeHtml(v)}</td>`
+  ).join('')}</tr>`).join('');
+  return `<div class="preview-table-wrap"><div class="preview-table-scroll"><table class="preview-table" style="width:${totalWidth}px"><colgroup>${colgroup}</colgroup><thead><tr>${theadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div></div>`;
+}
+
+async function tagsProcess() {
+  const btn   = document.getElementById('tags-process-btn');
+  const label = document.getElementById('tags-btn-label');
+  const tagPrefix = document.getElementById('tags-prefix-input').value.trim();
+
+  btn.classList.add('loading'); btn.disabled = true;
+  label.textContent = 'Converting…';
+  try {
+    const data = await fetch('/tags/process', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: tagsFilename, sheets: [...tagsSelectedSheets], tag_prefix: tagPrefix }),
+    }).then(r => r.json());
+    if (data.error) { alert('Error: ' + data.error); return; }
+    tagsShowResults(data.output, data.results);
+  } catch (e) { alert('Unexpected error: ' + e.message); }
+  finally {
+    btn.classList.remove('loading');
+    btn.disabled = tagsSelectedSheets.size === 0;
+    label.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Convert to Tags';
+  }
+}
+
+function tagsShowResults(output, results) {
+  const section = document.getElementById('tags-results-section');
+  const list    = document.getElementById('tags-results-list');
+  const dlLink  = document.getElementById('tags-download-link');
+  section.classList.remove('hidden');
+  dlLink.href = `/tags/download/${encodeURIComponent(output)}`;
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  list.innerHTML = results.map(r => {
+    const badges = `<span class="badge blue">${r.tagCount} tag${r.tagCount === 1 ? '' : 's'}</span>`;
+    const tagsTable = r.columns?.length
+      ? tagsBuildPreviewTable(r.columns, r.preview, [260, 420, 140])
+      : '<div class="empty-note">No tags were generated for this sheet.</div>';
+    // Just code + ItemNos — the columns Exam Autofill's merger actually
+    // reads — named to match its "<base>_tags.xlsx" convention so this can
+    // be dropped straight into that tab's Tags upload for a single exam.
+    const tagsActions = r.tagsFile
+      ? `<div class="result-actions"><a class="dl-btn" href="/tags/download/${encodeURIComponent(r.tagsFile)}"><i class="bi bi-download"></i> Download ${pdfEscapeHtml(r.tagsFile)}</a></div>`
+      : '';
+
+    const hasCo = r.coAnalysisColumns?.length > 0;
+    const coTable = hasCo
+      ? tagsBuildPreviewTable(r.coAnalysisColumns, r.coAnalysisPreview, [140, 160])
+      : '<div class="empty-note">No "Correct Answer" column (column E) found for this sheet.</div>';
+    // ItemNos + the answer letter, one row per question — matches column E
+    // of the CO Analysis sheet, named for Exam Autofill's Correct Answer
+    // upload (<base>_co-analysis.xlsx, see config.CORRECT_ANSWER_SUFFIX).
+    const coActions = r.coAnalysisFile
+      ? `<div class="result-actions"><a class="dl-btn" href="/tags/download/${encodeURIComponent(r.coAnalysisFile)}"><i class="bi bi-download"></i> Download ${pdfEscapeHtml(r.coAnalysisFile)}</a></div>`
+      : '';
+
+    return `<div class="preview-card">
+      <div class="result-name"><i class="bi bi-tags-fill"></i> ${pdfEscapeHtml(r.sheet)}</div>
+      <div class="badge-row">${badges}</div>
+      <div class="tags-view-toggle">
+        <button type="button" class="tags-view-btn active" onclick="tagsSwitchView(this, 'tags')">Tags</button>
+        <button type="button" class="tags-view-btn" onclick="tagsSwitchView(this, 'co')">Co-Analysis</button>
+      </div>
+      <div class="tags-view-pane" data-view-pane="tags">${tagsTable}${tagsActions}</div>
+      <div class="tags-view-pane hidden" data-view-pane="co">${coTable}${coActions}</div>
+    </div>`;
+  }).join('');
+}
+
+function tagsSwitchView(btn, view) {
+  const card = btn.closest('.preview-card');
+  card.querySelectorAll('.tags-view-btn').forEach(b => b.classList.toggle('active', b === btn));
+  card.querySelectorAll('[data-view-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.viewPane !== view));
+}
+
+async function tagsClearAll() {
+  await fetch('/tags/clear', { method: 'POST' });
+  tagsFilename = null;
+  tagsSheets = [];
+  tagsSelectedSheets.clear();
+  document.getElementById('tags-prefix-input').value = '';
+  tagsRenderFileList();
+  tagsRenderSheetList();
+  document.getElementById('tags-sheet-card').classList.add('hidden');
+  document.getElementById('tags-results-section').classList.add('hidden');
+  tagsSyncBtn();
+}
+
+async function tagsReset() {
+  if (!confirm('Clear the uploaded file and results?')) return;
+  await tagsClearAll();
 }
 </script>
 </body>
