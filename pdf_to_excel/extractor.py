@@ -13,6 +13,12 @@ def extract_text(pdf_path: Path, mode: str = "auto") -> str:
             page_text = _extract_page_text(page, mode)
             if page_text:
                 all_text_parts.append(page_text)
+            # pdfplumber caches every parsed character/word/layout structure
+            # on the page object and never lets go of it on its own — left
+            # unflushed, a many-page PDF holds *all* of its pages' parsed
+            # data in memory at once by the time the loop ends, which is how
+            # this ends up OOM-killing a 512MB web dyno on a long exam paper.
+            page.flush_cache()
     return "\n".join(all_text_parts)
 
 
@@ -22,6 +28,7 @@ def detect_layout(pdf_path: Path) -> dict:
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
             kinds.append(_page_layout_kind(page))
+            page.flush_cache()
     unique = set(kinds)
     overall = "single"
     if len(unique) == 1:
