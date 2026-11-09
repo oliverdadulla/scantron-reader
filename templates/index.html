@@ -2212,11 +2212,23 @@ async function pdfProcess() {
   btn.classList.add('loading'); btn.disabled = true;
   label.textContent = 'Converting…';
   try {
-    const data = await fetch('/pdf/process', {
+    const res = await fetch('/pdf/process', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ layouts: pdfLayoutOverrides, min_choices: pdfChoiceCounts }),
-    }).then(r => r.json());
+    });
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // A genuinely empty/truncated response (rather than a JSON error body)
+      // used to surface as a cryptic "Unexpected end of JSON input" — this
+      // at least says what actually happened and that retrying is sensible.
+      throw new Error(res.ok
+        ? 'The server returned an empty response. This is usually a one-off — please try converting again.'
+        : `Server error (HTTP ${res.status}). Please try again.`);
+    }
     if (data.error) { alert('Error: ' + data.error); return; }
     pdfShowResults(data.results);
   } catch(e) { alert('Unexpected error: ' + e.message); }
