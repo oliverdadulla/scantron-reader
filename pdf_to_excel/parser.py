@@ -165,6 +165,19 @@ def _parse_block(block: str) -> Optional[dict]:
 
     choices = _extract_choices(choices_text)
 
+    if _is_suspicious(choices):
+        # Something inside the question's own wording (a numbered list it
+        # asks about, a person's middle initial like "A. Gonzales") reads
+        # exactly like a choice marker to the pattern match above — that's
+        # not fixable with more regex, so hand this one block to an LLM
+        # instead. refine_block() is a no-op (returns None) unless
+        # GROQ_API_KEY is set, so without one this line changes nothing.
+        from .ai_refine import refine_block
+        refined = refine_block(block)
+        if refined:
+            question_text = _clean_text(refined["question"])
+            choices = {k.upper(): _clean_text(v) for k, v in refined["choices"].items()}
+
     result: dict = {
         "Question No.": question_no,
         "Question": question_text,
@@ -177,6 +190,17 @@ def _parse_block(block: str) -> Optional[dict]:
         if letter not in ("A", "B", "C", "D"):
             result[_choice_col_name(letter)] = choices[letter]
     return result
+
+
+def _is_suspicious(choices: dict) -> bool:
+    """True if the extracted choice letters don't form a clean A, B, C, ...
+    run with no gaps — e.g. {A, B, C, D, V} from a stray middle initial. A
+    real choice list is always contiguous from A, so any gap means at least
+    one "choice" is actually a false match from inside the question text."""
+    if not choices:
+        return False
+    expected = [chr(ord("A") + i) for i in range(len(choices))]
+    return sorted(choices.keys()) != expected
 
 
 def _extract_choices(choices_text: str) -> dict:
