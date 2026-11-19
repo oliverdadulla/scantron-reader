@@ -38,6 +38,9 @@ _COLON_BLANK = re.compile(r":\s*_{2,}")
 # Classic page-number formats:  "- 3 -"  or  "– 3 –"
 _PAGE_DASH = re.compile(r"^[-–]\s*\d+\s*[-–]$")
 
+# "Page 1 of 10" footer/header, on its own line or trailing other text
+_PAGE_OF = re.compile(r"\bpage\s*\d+\s*of\s*\d+\b", re.IGNORECASE)
+
 # Standalone 1-3 digit number on its own line  (page numbers like "2", "12")
 _LONE_NUMBER = re.compile(r"^\d{1,3}\s*$")
 
@@ -107,6 +110,7 @@ def _is_junk_line(line: str) -> bool:
       • Lines starting with underscores        (signature/form blanks)
       • Lines with "word: ____"                (labeled blank fields)
       • Classic page-number formats  (- N -)
+      • "Page N of M" footers/headers
       • Standalone 1–3 digit numbers           (bare page numbers)
       • 3+ "word:" label patterns on one line  (metadata rows)
       • Short "...by: Name" attribution lines  (signature lines)
@@ -120,6 +124,10 @@ def _is_junk_line(line: str) -> bool:
     if _COLON_BLANK.search(s):
         return True
     if _PAGE_DASH.match(s):
+        return True
+    # "Page 1 of 10" — length-capped so a question that happens to mention
+    # a page in passing doesn't get silently eaten.
+    if len(s) < 40 and _PAGE_OF.search(s):
         return True
     if _LONE_NUMBER.match(s):
         return True
