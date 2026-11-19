@@ -45,8 +45,8 @@ def _halves(page):
 
 def _page_layout_kind(page) -> str:
     left_crop, right_crop = _halves(page)
-    left_text  = left_crop.extract_text()  or ""
-    right_text = right_crop.extract_text() or ""
+    left_text  = left_crop.extract_text(x_tolerance=1)  or ""
+    right_text = right_crop.extract_text(x_tolerance=1) or ""
     left_has_content  = len(left_text.strip())  > TWO_COLUMN_CHAR_THRESHOLD
     right_has_content = len(right_text.strip()) > TWO_COLUMN_CHAR_THRESHOLD
     if left_has_content and right_has_content and _has_question_numbers_in_right_half(page, page.width):
@@ -55,13 +55,16 @@ def _page_layout_kind(page) -> str:
 
 
 def _extract_single(page) -> str:
-    return (page.extract_text(layout=True) or page.extract_text() or "").strip()
+    # x_tolerance=1 (below pdfplumber's default of 3) — some PDFs space
+    # adjacent words only ~2-3pt apart, which the default tolerance reads
+    # as one run of characters and merges into a single word with no space.
+    return (page.extract_text(layout=True, x_tolerance=1) or page.extract_text(x_tolerance=1) or "").strip()
 
 
 def _extract_double(page) -> str:
     left_crop, right_crop = _halves(page)
-    left_layout  = left_crop.extract_text(layout=True)  or left_crop.extract_text()  or ""
-    right_layout = right_crop.extract_text(layout=True) or right_crop.extract_text() or ""
+    left_layout  = left_crop.extract_text(layout=True, x_tolerance=1)  or left_crop.extract_text(x_tolerance=1)  or ""
+    right_layout = right_crop.extract_text(layout=True, x_tolerance=1) or right_crop.extract_text(x_tolerance=1) or ""
     return (left_layout.rstrip("\n") + "\n" + right_layout).strip()
 
 
@@ -73,8 +76,8 @@ def _extract_page_text(page, mode: str = "auto") -> str:
 
     width = page.width
     left_crop, right_crop = _halves(page)
-    left_text  = left_crop.extract_text()  or ""
-    right_text = right_crop.extract_text() or ""
+    left_text  = left_crop.extract_text(x_tolerance=1)  or ""
+    right_text = right_crop.extract_text(x_tolerance=1) or ""
     left_has_content  = len(left_text.strip())  > TWO_COLUMN_CHAR_THRESHOLD
     right_has_content = len(right_text.strip()) > TWO_COLUMN_CHAR_THRESHOLD
     if not (left_has_content and right_has_content):
@@ -85,7 +88,7 @@ def _extract_page_text(page, mode: str = "auto") -> str:
 
 
 def _has_question_numbers_in_right_half(page, width: float) -> bool:
-    words = page.extract_words(x_tolerance=3, y_tolerance=3)
+    words = page.extract_words(x_tolerance=1, y_tolerance=3)
     count = sum(
         1 for w in words
         if w["x0"] >= width / 2 and re.match(r"^\d{1,3}\.$", w["text"])
@@ -94,7 +97,7 @@ def _has_question_numbers_in_right_half(page, width: float) -> bool:
 
 
 def _extract_text_spatial(page) -> str:
-    words = page.extract_words(x_tolerance=5, y_tolerance=5)
+    words = page.extract_words(x_tolerance=1, y_tolerance=5)
     if not words:
         return ""
     lines: dict[int, list] = {}
